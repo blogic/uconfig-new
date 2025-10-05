@@ -1,0 +1,26 @@
+description:
+  A device has certain properties that describe its identity and location.
+  These properties are described inside this object.
+type: object
+properties:
+  ssid:
+    description:
+      The broadcasted SSID of the wireless network and for for managed mode
+      the SSID of the network you’re connecting to
+    type: string
+    maxLength: 32
+    minLength: 1
+  wifi-radios:
+    description:
+      The list of radios hat the SSID should be broadcasted on. The configuration layer
+      will use the first matching phy/band.
+    type: array
+    items:
+      type: string
+  bssid:
+    description:
+      Override the BSSID of the network, only applicable in adhoc or sta mode.
+    type: string
+    format: uc-mac
+  encryption:
+    $ref: "https://uconfig.org/schema/v1/interface/easymesh-encryption/"

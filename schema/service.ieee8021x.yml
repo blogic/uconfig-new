@@ -1,0 +1,9 @@
+$module: uconfig-mod-ieee8021x
+description:
+  This section allows enabling wired ieee802.1X
+type: object
+properties:
+  radius-server:
+    description:
+      The name of the radius server that shall be used. The settings reside inside the definitions block of the config.
+    type: string

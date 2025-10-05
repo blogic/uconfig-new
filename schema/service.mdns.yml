@@ -1,0 +1,11 @@
+$module: uconfig-mod-mdns
+type: object
+description:
+  This section can be used to setup the mdns servers.
+properties:
+  additional-hostnames:
+    description:
+      This is an array of additional hostnames that the AP shall announce.
+    type: array
+    items:
+      type: string

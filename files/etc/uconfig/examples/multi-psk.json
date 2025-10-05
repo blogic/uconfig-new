@@ -1,0 +1,66 @@
+{
+	"uuid": 2,
+
+	"unit": {
+                "timezone": "Europe/Berlin"
+        },
+
+	"radios": {
+		"2G": {
+			"channel-mode": "HE",
+			"channel-width": 20
+		},
+		"5G": {
+			"channel-mode": "HE",
+			"channel-width": 80,
+			"channel": 36
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"wan*": "auto",
+				"lan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			},
+			"ssids": {
+				"main": {
+					"ssid": "OpenWrt",
+					"wifi-radios": [
+						"2G", "5G"
+					],
+					"encryption": {
+						"proto": "psk2",
+						"key": "aaaaaaaa"
+					},
+					"multi-psk": {
+						"blogic": {
+							"mac": [
+								"00:11:22:33:44:55", "aa:bb:cc:dd:ee:ff"
+							],
+							"key": "bbbbbbbb"
+						},
+						"vlan": {
+							"key": "cccccccc",
+							"vlan-id": 100
+						}
+					}
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

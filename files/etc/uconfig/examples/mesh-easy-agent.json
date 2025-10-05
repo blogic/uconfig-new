@@ -1,0 +1,48 @@
+{
+	"uuid": 2,
+
+	"unit": {
+		"timezone": "Europe/Berlin"
+	},
+
+	"radios": {
+		"2G": {
+			"channel-mode": "HE",
+			"channel-width": 20
+		},
+		"5G": {
+			"channel-mode": "HE",
+			"channel-width": 80,
+			"channel": 36
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"easymesh": "agent",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"wan*": "auto",
+				"lan*": "auto"
+			},
+
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+
+			"ipv6": {
+				"addressing": "static",
+				"dhcpv6": {
+					"mode": "hybrid"
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

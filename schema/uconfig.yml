@@ -1,0 +1,34 @@
+$id: https://uconfig.openwrt.org/uconfig.schema.json
+$schema: http://json-schema.org/draft-07/schema#
+description: OpenWrt uconfig schema
+type: object
+properties:
+  strict:
+    description:
+      The device will reject any configuration that causes warnings if strict mode is enabled.
+    type: boolean
+    default: false
+  uuid:
+    description:
+      The unique ID of the configuration. This is the unix timestamp of when the config was created.
+    type: integer
+  unit:
+    $ref: "https://uconfig.openwrt.org/schema/v1/unit/"
+  radios:
+    type: object
+    patternProperties:
+      ".+":
+        $ref: "https://uconfig.openwrt.org/schema/v1/radio/"
+        additionalProperties: false
+  interfaces:
+    type: object
+    patternProperties:
+      ".+":
+        $ref: "https://uconfig.openwrt.org/schema/v1/interface/"
+        additionalProperties: false
+  definitions:
+    $ref: "https://uconfig.openwrt.org/schema/v1/definitions/"
+  ethernet:
+    $ref: "https://uconfig.openwrt.org/schema/v1/ethernet/"
+  services:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/"

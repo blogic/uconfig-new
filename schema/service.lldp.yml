@@ -1,0 +1,13 @@
+$module: uconfig-mod-lldp
+type: object
+description:
+  This section can be used to enable lldp on network ports..
+properties:
+  system-name:
+    description:
+      The name that gets annouced.
+    type: string
+  system-description:
+    description:
+      The description that gets annouced.
+    type: string

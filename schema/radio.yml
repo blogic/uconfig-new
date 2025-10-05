@@ -1,0 +1,96 @@
+description:
+  Describe a physical radio on the AP. A radio is be parent to several VAPs.
+  They all share the same physical properties.
+type: object
+properties:
+  band:
+    description:
+      Specifies the wireless band to configure the radio for. Available radio device
+      phys on the target system are matched by the wireless band given here.
+      If multiple radio phys support the same band, the settings specified here will
+      be applied to all of them.
+    type: string
+    enum:
+    - 2G
+    - 5G
+    - 6G
+  channel:
+    description:
+      Specifies the wireless channel to use. A value of 'auto' starts the ACS
+      algorithm.
+    oneOf:
+      - type: integer
+        maximum: 196
+        minimum: 1
+      - type: string
+        const: auto
+  channel-mode:
+    description:
+      Define the ideal channel mode that the radio shall use. This can be 802.11n, 802.11ac
+      or 802.11ax. This is just a hint for the AP. If the requested value is not supported
+      then the AP will use the highest common denominator.
+    type: string
+    enum:
+    - HT
+    - VHT
+    - HE
+    - EHT
+    default: HE
+  channel-width:
+    description:
+      The channel width that the radio shall use. This is just a hint for the AP. If the
+      requested value is not supported then the AP will use the highest common denominator.
+    type: integer
+    enum:
+    - 20
+    - 40
+    - 80
+    - 160
+    - 320
+    - 8080
+    default: 80
+  valid-channels:
+    description:
+      Pass a list of valid-channels that can be used during ACS.
+    type: array
+    items:
+      type: integer
+      maximum: 196
+      minimum: 1
+  allow-dfs:
+    description:
+      This property defines whether a radio may use DFS channels.
+    type: boolean
+    default: true
+  require-mode:
+    description:
+      Stations that do no fulfill these HT modes will be rejected.
+    type: string
+    enum:
+    - HT
+    - VHT
+    - HE
+  tx-power:
+    description:
+      This option specifies the transmission power in dBm
+    type: integer
+    maximum: 30
+    minimum: 0
+  rates:
+    $ref: "https://uconfig.openwrt.org/schema/v1/radio/rates/"
+  legacy-rates:
+    description:
+      Allow legacy 802.11b data rates.
+    type: boolean
+    default: false
+  maximum-clients:
+    description:
+      Set the maximum number of clients that may connect to this radio. This
+      value is accumulative for all attached VAP interfaces.
+    type: integer
+    example: 64
+  he-multiple-bssid:
+    description:
+      Enabling this option will make the PHY broadcast its BSSs using the multiple BSSID beacon IE.
+    type: boolean
+    default: false

@@ -1,0 +1,27 @@
+$module: uconfig-mod-easymesh
+description:
+  This section describes the easymesh service configuration.
+type: object
+properties:
+  mode:
+    description:
+      The easymesh mode - controller, agent, or hybrid (both controller and agent)
+    type: string
+    enum:
+    - controller
+    - agent
+    - hybrid
+  backhaul:
+    description:
+      Backhaul SSID configuration for easymesh
+    $ref: "https://uconfig.org/schema/v1/interface/easymesh-backhaul/"
+  fronthaul:
+    description:
+      Fronthaul SSID configurations for easymesh
+    type: object
+    patternProperties:
+      ".+":
+        $ref: "https://uconfig.org/schema/v1/interface/easymesh-fronthaul/"
+        additionalProperties: false
+required:
+- mode

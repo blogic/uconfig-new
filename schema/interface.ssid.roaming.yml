@@ -1,0 +1,27 @@
+description:
+  Enable 802.11r Fast Roaming for this BSS.
+type: object
+properties:
+  message-exchange:
+    description:
+      Shall the pre authenticated message exchange happen over the air or
+      distribution system.
+    type: string
+    enum:
+    - air
+    - ds
+    default: air
+  generate-psk:
+    description:
+      Whether to generate FT response locally for PSK networks. This avoids
+      use of PMK-R1 push/pull from other APs with FT-PSK networks.
+    type: boolean
+    default: true
+  domain-identifier:
+    description:
+      Mobility Domain identifier (dot11FTMobilityDomainID, MDID).
+    type: string
+    maxLength: 4
+    minLength: 4
+    examples:
+    - abcd

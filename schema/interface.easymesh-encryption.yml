@@ -1,0 +1,21 @@
+description:
+  These encryption properties of this fronthaul SSID
+type: object
+properties:
+  proto:
+    description:
+      The wireless encryption protocol that shall be used for this BSS
+    type: string
+    enum:
+    - psk2
+    - sae
+    - sae-mixed
+    examples:
+    - psk2
+  key:
+    description:
+      The Pre Shared Key (PSK) that is used for encryption on the BSS when
+      using any of the WPA-PSK modes.
+    type: string
+    maxLength: 63
+    minLength: 8
