@@ -1,0 +1,34 @@
+#!/bin/sh /etc/rc.common
+
+START=81
+STOP=90
+
+start() {
+	local autostart exitnode routes
+	local cmd_args=""
+
+	config_load tailscale
+	config_get autostart settings autostart 0
+	config_get exitnode settings exitnode 0
+	config_get routes settings routes
+
+	[ -f /etc/tailscale/derpmap.cached.json ] || return 0
+
+	if [ "$autostart" = "0" ]; then
+		tailscale down
+		return 0
+	fi
+
+	[ "$exitnode" = "1" ] && cmd_args="$cmd_args --advertise-exit-node"
+
+	if [ -n "$routes" ]; then
+		local route_list=""
+		for route in $routes; do
+			[ -n "$route_list" ] && route_list="$route_list,"
+			route_list="$route_list$route"
+		done
+		[ -n "$route_list" ] && cmd_args="$cmd_args --advertise-routes=$route_list"
+	fi
+
+	tailscale up --reset --timeout 5s --accept-routes $cmd_args
+}

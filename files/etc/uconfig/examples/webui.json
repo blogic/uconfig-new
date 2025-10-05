@@ -1,0 +1,98 @@
+{
+	"unit": {
+                "timezone": "Europe/Berlin",
+		"hostname": "ap",
+        	"leds-active": true
+	},
+
+	"radios": {
+		"2G": {
+			"channel-mode": "HE",
+			"channel-width": 20
+		},
+		"5G": {
+			"channel-mode": "HE",
+			"channel-width": 80,
+			"channel": 36
+		}
+	},
+
+	"interfaces": {
+		"main": {
+			"role": "upstream",
+			"services": [ "mdns", "ssh", "cli", "uconfig-ui", "fingerprint", "unet" ],
+			"ports": {
+				"wan*": "auto",
+				"lan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			},
+			"ssids": {
+				"main": {
+					"ssid": "OpenWrt",
+					"template": {
+						"mode": "encrypted",
+						"security": "maximum",
+						"key": "aaaaaaaa"
+					},
+					"wifi-radios": [
+						"2G", "5G"
+					],
+					"encryption": {
+						"key": "aaaaaaaa"
+					}
+				},
+				"mesh": {
+					"disable": true,
+					"template": {
+						"mode": "batman-adv",
+						"key": "aaaaaaaa"
+					},
+					"wifi-radios": [
+						"5G"
+					]
+				}
+			}
+		},
+		"guest": {
+			"role": "upstream",
+			"disable": true,
+			"services": [ "mdns", "fingerprint" ],
+			"ports": {
+				"wan*": "auto",
+				"lan*": "auto"
+			},
+			"vlan": {
+				"id": 100
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ssids": {
+				"guest": {
+					"ssid": "Guest",
+					"template": {
+						"mode": "encrypted",
+						"security": "maximum",
+						"key": "aaaaaaaa"
+					},
+					"wifi-radios": [
+						"2G", "5G"
+					],
+					"isolate-clients": true,
+					"rate-limit": 0
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

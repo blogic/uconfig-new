@@ -1,0 +1,68 @@
+{
+	"uuid": 2,
+
+	"radios": {
+		"2G": {
+			"channel-mode": "HE",
+			"channel-width": 20
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"wan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			},
+			"ssids": {
+				"main": {
+					"ssid": "OpenWrt",
+					"wifi-radios": [
+						"2G"
+					],
+					"template": {
+						"mode": "opportunistic",
+						"security": "compatibility"
+					}
+				}
+			}
+		},
+		"lan": {
+			"role": "downstream",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"lan*": "auto"
+			},
+
+			"ipv4": {
+				"addressing": "static",
+				"subnet": "192.168.11.1/24",
+				"dhcp-pool": {
+					"lease-first": 10,
+					"lease-count": 100,
+					"lease-time": "6h"
+				}
+			},
+
+			"ipv6": {
+				"addressing": "static",
+				"dhcpv6": {
+					"mode": "hybrid"
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

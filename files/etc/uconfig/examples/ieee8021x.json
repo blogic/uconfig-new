@@ -1,0 +1,68 @@
+{
+	"uuid": 2,
+
+	"definitions": {
+		"radius-servers": {
+			"radius": {
+				"authentication": {
+					"host": "127.0.0.1",
+					"port": 1812,
+					"secret": "secret"
+				},
+				"accounting": {
+					"host": "127.0.0.1",
+					"port": 1813,
+					"secret": "secret"
+				}
+			}
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"services": [ "ssh" ],
+			"ports": {
+				"wan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			}
+		},
+		"lan": {
+			"role": "downstream",
+			"services": [ "ssh" ],
+			"ieee8021x-ports": {
+				"lan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "static",
+				"subnet": "192.168.11.1/24",
+				"dhcp-pool": {
+					"lease-first": 10,
+					"lease-count": 100,
+					"lease-time": "6h"
+				}
+			},
+
+			"ipv6": {
+				"addressing": "static",
+				"dhcpv6": {
+					"mode": "hybrid"
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		},
+		"ieee8021x": {
+			"radius-server": "radius"
+		}
+	}
+}

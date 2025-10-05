@@ -1,0 +1,21 @@
+description:
+  This section describes all of the services that may be present on the AP.
+  Each service is then referenced via its name inside an interface, ssid, ...
+type: object
+properties:
+  adguardhome:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/adguardhome/"
+  ieee8021x:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/ieee8021x/"
+  lldp:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/lldp/"
+  log:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/log/"
+  mdns:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/mdns/"
+  radius-server:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/radius-server/"
+  ssh:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/ssh/"
+  tailscale:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/tailscale/"

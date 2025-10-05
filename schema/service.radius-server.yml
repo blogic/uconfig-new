@@ -1,0 +1,30 @@
+description:
+  This section configures the built-in RADIUS server daemon.
+type: object
+properties:
+  auth-port:
+    description:
+      The port for RADIUS authentication requests.
+    type: integer
+    maximum: 65535
+    minimum: 1024
+    default: 1812
+  acct-port:
+    description:
+      The port for RADIUS accounting requests.
+    type: integer
+    maximum: 65535
+    minimum: 1024
+    default: 1813
+  secret:
+    description:
+      The shared secret for RADIUS clients.
+    type: string
+    default: secret
+  users:
+    description:
+      RADIUS users for authentication.
+    type: object
+    patternProperties:
+      ".+":
+        $ref: "https://uconfig.openwrt.org/schema/v1/service/radius-server/user/"

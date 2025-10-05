@@ -1,0 +1,52 @@
+{
+	"uuid": 2,
+
+	"unit": {
+                "timezone": "Europe/Berlin"
+        },
+
+	"radios": {
+		"5G": {
+			"channel-mode": "HE",
+			"channel-width": 80,
+			"channel": 36
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"wan*": "auto",
+				"lan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			},
+			"ssids": {
+				"main": {
+					"ssid": "WDS",
+					"wifi-radios": [
+						"5G"
+					],
+					"bss-mode": "wds-repeater",
+					"template": {
+						"mode": "encrypted",
+						"security": "maximum",
+						"key": "aaaaaaaa"
+					}
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

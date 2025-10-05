@@ -1,0 +1,3 @@
+
+SHADOW=/etc/uconfig/shadow
+touch $SHADOW/lldpd

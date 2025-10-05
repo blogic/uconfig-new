@@ -1,0 +1,77 @@
+{
+	"uuid": 2,
+
+	"radios": {
+		"2G": {
+			"channel-mode": "EHT",
+			"channel-width": 40
+		},
+		"5G": {
+			"channel-mode": "EHT",
+			"channel-width": 80
+		},
+		"6G": {
+			"channel-mode": "EHT",
+			"channel-width": 160
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"ports": {
+				"wan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			}
+		},
+		"lan": {
+			"role": "downstream",
+			"services": [ "ssh" ],
+			"ports": {
+				"lan*": "auto"
+			},
+
+			"ipv4": {
+				"addressing": "static",
+				"subnet": "192.168.11.1/24",
+				"dhcp-pool": {
+					"lease-first": 10,
+					"lease-count": 100,
+					"lease-time": "6h"
+				}
+			},
+
+			"ipv6": {
+				"addressing": "static",
+				"dhcpv6": {
+					"mode": "hybrid"
+				}
+			},
+
+			"ssids": {
+				"nat": {
+					"ssid": "OpenWrt",
+					"wifi-radios": [
+						"2G", "5G", "6G"
+					],
+					"template": {
+						"mode": "encrypted",
+						"security": "maximum",
+						"key": "aaaaaaaa"
+					}
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

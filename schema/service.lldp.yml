@@ -1,0 +1,20 @@
+$module: uconfig-mod-lldp
+type: object
+description:
+  This section can be used to enable lldp on network ports.
+properties:
+  hostname:
+    description:
+      The hostname that gets announced.
+    type: string
+    default: OpenWrt
+  description:
+    description:
+      The description that gets announced.
+    type: string
+    default: OpenWrt
+  location:
+    description:
+      The location that gets announced.
+    type: string
+    default: LAN

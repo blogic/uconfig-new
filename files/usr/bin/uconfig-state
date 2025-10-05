@@ -1,0 +1,552 @@
+#!/usr/bin/ucode
+
+'use strict';
+
+import { readfile, writefile, glob, popen, unlink } from 'fs';
+import * as nl80211 from 'nl80211';
+import * as ubus from 'ubus';
+import * as uloop from 'uloop';
+import * as rtnl from 'rtnl';
+import * as wiphy from 'uconfig.wiphy';
+let pending = false;
+let l3_devices;
+let capabilities = json(readfile('/etc/uconfig/capabilities.json'));
+
+let fingerprints = {};
+let devices_db = {};
+
+let wan_traffic = {
+	up: [ [], [], [], [], ],
+	down: [ [], [], [], [], ],
+	tx_bytes: [],
+	rx_bytes: [],
+	interval: [],
+};
+
+function traffic_fill(index, count) {
+	for (let i = 0; i < count; i++) {
+		push(wan_traffic.up[index], 0);
+		push(wan_traffic.down[index], 0);
+	}
+}
+
+traffic_fill(0, 12);
+traffic_fill(1, 60);
+traffic_fill(2, 24);
+traffic_fill(3, 7);
+
+function traffic_update(statistics, index, interval) {
+	if (wan_traffic.tx_bytes[index]) {
+		push(wan_traffic.up[index], statistics.tx_bytes - wan_traffic.tx_bytes[index]);
+		shift(wan_traffic.up[index]);
+	}
+	if (wan_traffic.rx_bytes[index]) {
+		push(wan_traffic.down[index], statistics.rx_bytes - wan_traffic.rx_bytes[index]);
+		shift(wan_traffic.down[index]);
+	}
+
+	wan_traffic.tx_bytes[index] = statistics.tx_bytes;
+	wan_traffic.rx_bytes[index] = statistics.rx_bytes;
+	wan_traffic.interval[index] = interval;
+}
+
+function traffic() {
+	let status = ubus.call('network.device', 'status');
+	let statistics = status['br-wan']?.statistics;
+
+	if (!statistics)
+		return;
+	
+	traffic_update(statistics, 0, 0);
+
+	let now = gmtime();
+	let keys = [ null, 'min', 'hour', 'wday' ];
+	for (let i = 1; i < 4; i++) {
+		let interval = now[keys[i]];
+		if (wan_traffic.interval[i] == interval)
+			continue;
+		traffic_update(statistics, i, interval);
+	}
+}
+
+function check_mac(mac) {
+	mac = lc(mac);
+	return (match(mac, /33:33:.*/) || match(mac, /01:00:5e.*/) || match(mac, /ff:ff:ff.*/));
+}
+
+function arp_discover() {
+	let cache = rtnl.request(rtnl.const.RTM_GETNEIGH, rtnl.const.NLM_F_DUMP, {});
+	for (let arp in cache) {
+		if (arp.dev == 'lo')
+			continue;
+		if (check_mac(arp.lladdr))
+			continue;
+		if (arp.state == rtnl.const.REACHABLE)
+			continue;
+		rtnl.request(rtnl.const.RTM_NEWNEIGH,
+			     rtnl.const.NLM_F_CREATE | rtnl.const.NLM_F_REPLACE,
+			     { dev: arp.dev, state: rtnl.const.NUD_INCOMPLETE,
+			       flags: rtnl.const.NTF_USE, family: arp.family,
+			       dst: arp.dst }); 
+	}
+	sleep(2000);
+}
+
+function freq2channel(freq) {
+	if (freq == 2484)
+		return 14;
+	else if (freq < 1000)
+		return (freq - 900) / 2;
+	else if (freq > 2400 && freq < 2484)
+		return (freq - 2407) / 5;
+	else if (freq >= 4910 && freq <= 4980)
+		return (freq - 4000) / 5;
+	else if(freq >= 56160 + 2160 * 1 && freq <= 56160 + 2160 * 6)
+		return (freq - 56160) / 2160;
+	else if (freq >= 5955 && freq <= 7115)
+		return (freq - 5950) / 5;
+	else
+		return (freq - 5000) / 5;
+}
+
+let bandwidths = {
+	'2g': {
+		'20': [ '1', '5', '9', '13' ],
+		'40': [ '1', '9' ],
+	},
+	'5g': {
+		'40': [ '36', '44', '52', '60', '100', '108',
+			'116', '124', '132', '140', '149', '157', '165', '173',
+			'184', '192' ],
+		'80': [ '36', '52', '100', '116', '132', '149' ],
+		'160': [ '36', '100' ],
+	}
+};
+
+function radios() {
+	let status = ubus.call('network.wireless', 'status');
+	let wifi = {};
+	for (let name, data in status) {
+		let radio = {
+			htmode: data.config.htmode,
+			channel: data.config.channel,
+		};
+		let modes = { HT: /HT.*/, VHT: /VHT.*/, HE: /HE.*/, EHT: /EHT.*/, };
+		for (let mode, mask in modes)
+			if (match(data.config.htmode, mask))
+				radio.mode = mode;
+		if (radio.mode)
+			radio.bandwidth = replace(data.config.htmode, radio.mode, '');
+		for (let iface in data.interfaces) {
+			if (iface.config.mode != 'ap')
+				continue;
+			let hapd = ubus.call(`hostapd.${iface.ifname}`, 'get_status');
+			if (hapd.status != 'ENABLED')
+				continue;
+			radio.active_channel = '' + hapd.channel;
+			radio.freq = hapd.freq;
+			radio.utilization = hapd.airtime?.utilization;
+			radio.bandwidths = [];
+			for (let phy in wiphy.phys) {
+				if (phy.phy != hapd.phy)
+					continue;
+				let widths = phy.bands?.[uc(data.config.band)]?.widths;
+				if (widths)
+					radio.bandwidths = map(widths, w => '' + w);
+				break;
+			}
+			let channels = [];
+			let phy = nl80211.request(nl80211.const.NL80211_CMD_GET_WIPHY, nl80211.const.NLM_F_DUMP, { split_wiphy_dump: true, wiphy: +substr(hapd.phy, 3, 1) });
+			for (let band in phy.wiphy_bands) {												 
+				for (let freq in band?.freqs) {									     
+					if (freq.disabled)										  
+						continue;
+					push(channels, '' + freq2channel(freq.freq));
+					/*
+					radio.channels[freq2channel(freq.freq)] = {
+						freq: freq.freq,
+					};
+					if (freq.radar)
+						channels[freq2channel(freq.freq)].radar = true
+					*/
+				}
+			}
+			radio.channels = { 'b20': channels };
+			for (let k, bw in radio.bandwidths) {
+				if (!bandwidths[data.config.band][bw])
+					continue;
+				radio.channels['b' + bw] = [];
+				for (let l, chan in bandwidths[data.config.band][bw])
+					if (chan in channels)
+						push(radio.channels['b' + bw], chan);
+			}
+
+			break;
+		}
+		if (radio.channel)
+			wifi[data.config.band] = radio;
+	}
+	return wifi;
+}
+
+function add_mac(stations, mac) {
+	stations[mac] ??= {
+		mac,
+	};
+}
+
+function network_interfaces() {
+	let ifaces = ubus.call('network.interface', 'dump');
+	l3_devices = {};
+
+	for (let iface in ifaces.interface) {
+		if (iface.interface in ['main', 'guest'])
+			l3_devices[iface.l3_device] = iface.interface;
+	}
+}
+
+function arp(stations) {
+	let neighs = rtnl.request(rtnl.const.RTM_GETNEIGH, rtnl.const.NLM_F_DUMP, {});
+
+	for (let neigh in neighs) {
+		if (!neigh.lladdr)
+			continue;
+		let mac = uc(neigh.lladdr);
+		if (check_mac(mac))
+			continue;
+		add_mac(stations, mac);
+
+		if (l3_devices[neigh.dev])
+			stations[mac].network = l3_devices[neigh.dev];
+
+		if (neigh.state == rtnl.const.REACHABLE)
+			stations[mac].online = true;
+		else if (neigh.cacheinfo.confirmed < 60 * 1000)
+			stations[mac].online = true;
+		switch(neigh.family) {
+		case rtnl.const.AF_INET:
+			stations[mac].ipv4 = neigh.dst;
+			break;
+		case rtnl.const.AF_INET6:
+			stations[mac].ipv6 ??= [];
+			push(stations[mac].ipv6, neigh.dst);
+			break;
+		}
+	}
+}
+
+function assoc_list(stations) {
+	let clients = ubus.call('rrm', 'get_clients');
+
+	for (let mac, client in clients) {
+		mac = uc(mac);
+		add_mac(stations, mac);
+		stations[mac].network = client.network;
+		delete client.network;
+		stations[mac].wifi = client;
+	}
+}
+
+function fingerprint(stations) {
+	for (let mac, fingerprint in fingerprints) {
+		mac = uc(mac);
+		if (!stations[mac])
+			continue;
+		stations[mac].fingerprint = fingerprint;
+		if (fingerprint.device_name || fingerprint.device)
+			stations[mac].hostname = fingerprint.device_name || fingerprint.device;
+	}
+}
+
+function dhcp_leases(stations) {
+	let static = {
+	};
+
+	let leases = readfile('/tmp/dhcp.leases');
+	let lines = split(leases, '\n');
+
+	for (let line in lines) {
+		let values = split(line, ' ');
+		if (length(values) != 5)
+			continue;
+		
+		let mac = uc(values[1]);
+
+		add_mac(stations, mac);
+		stations[mac].ipv4 = values[2];
+		stations[mac].dhcp = (mac in static[stations[mac].network]) ? 'static' : 'dynamic';
+		if (values[3] != '*')
+			stations[mac].hostname ??= values[3];
+	}
+}
+
+function nlbwmon(stations) {
+	let pipe = popen('nlbw -c show -c json');
+	let data = json(pipe.read('all') || '{}');
+	pipe.close();
+	if (!data?.data)
+		return;
+	data = data.data;
+	for (let traffic in data) {
+		let mac = uc(traffic[3]);
+		if (!stations[mac])
+			continue;
+		let type = traffic[10] || 'unknown';
+		stations[mac].bytes ??= 0;
+		stations[mac].traffic ??= {};
+		stations[mac].traffic[type] ??= { bytes: 0 };
+		stations[mac].traffic[type].bytes += traffic[6] + traffic[8];
+		stations[mac].bytes += traffic[6] + traffic[8];
+	}
+}
+
+function lookup_devices() {
+	let stations = {};
+	pending = true;
+	network_interfaces();
+	arp(stations);
+
+	assoc_list(stations);
+	fingerprint(stations);
+	dhcp_leases(stations);
+	nlbwmon(stations);
+
+	let devices = {};
+
+	for (let mac, station in stations) {
+		if (!station?.network)
+			continue;
+		devices[station.network] ??= {};
+		devices[station.network][lc(mac)] = station;
+		station.mac = mac;
+		if (station.network)
+			delete station.network;
+	}
+
+	return devices;
+}
+
+function update_fingerprint() {
+	fingerprints = ubus.call('fingerprint', 'fingerprint');
+}
+
+function device_key(device) {
+	for (let key in [ 'name', 'hostname', 'mac' ])
+		if (device[key])
+			return lc(device[key]);
+}
+
+function update_devices_db() {
+	let devices = lookup_devices();
+	for (let k, v in devices.main) {
+		let mac = lc(v.mac);
+		if (!(mac in devices_db) ||
+		    (length(devices_db[mac]?.fingerprint) < length(v.fingerprint)) ||
+		    (!devices_db[mac]?.hostname && v.hostname)) {
+			if (!devices_db[mac])
+				devices_db[mac] = {
+					created: time(),
+					mac,
+				};
+			if (length(v.fingerprint))
+				devices_db[mac].fingerprint = v.fingerprint;
+			if (v.hostname)
+				devices_db[mac].hostname = v.hostname;
+			writefile('/etc/uconfig/devices/' + mac, devices_db[mac]);
+		}
+	}
+	for (let k, v in devices_db) {
+		let id;
+		if (lc(v.mac) in devices.main) {
+			id = lc(v.mac);
+		} else if (v.mac) {
+			id = lc(v.mac);
+			devices.main[id] = {};
+			for (let key in [ 'mac', 'fingerprint', 'hostname' ])
+				if (v[key])
+					devices.main[id][key] = v[key];
+		}
+		if (id) {
+			devices.main[id].created = v.created;
+			devices.main[id].ignore = !!v.ignore;
+			if (v.name)
+				devices.main[id].name = v.name;
+		}
+	}
+
+	devices.main = sort(devices.main, (k1, k2, v1, v2) => {
+		return device_key(v1) < device_key(v2) ? -1 : 1;
+	});
+
+	return devices;
+}
+
+function load_devices_db() {
+	let files = glob('/etc/uconfig/devices/*');
+	for (let name in files) {
+		let data = readfile(name);
+		if (data)
+			data = json(data);
+		if (data)
+			devices_db[data.mac] = data;
+	}
+}
+
+function ports(args) {
+	let status = ubus.call('network.device', 'status');
+	let roles = {};
+	let ports;
+
+	if (args.network) {
+		ports = readfile(`/tmp/uconfig/ports.${args.network}`);
+		if (ports)
+			ports = json(ports);
+	}
+
+	for (let role in [ 'wan', 'lan' ]) {
+		let spec = capabilities.network[role];
+		for (let i, ifname in spec) {
+			role = uc(role);
+			if (ports && !(ifname in ports))
+				continue;
+			push(roles[role] = roles[role] || [], {
+				netdev: ifname,
+				index: i,
+				carrier: status[ifname].carrier,
+				speed: replace(status[ifname].speed, 'F', ''),
+				macaddr: status[ifname].macaddr,
+				rx_bytes: status[ifname].statistics.rx_bytes,
+				tx_bytes: status[ifname].statistics.tx_bytes,
+			});
+		}
+	}
+
+	let rv = {};
+
+	for (let role, ports in roles) {
+		switch (length(ports)) {
+		case 0:
+			break;
+
+		case 1:
+			rv[role] = ports[0];
+			break;
+
+		default:
+			map(sort(ports, (a, b) => (a.index - b.index)), (port, i) => {
+				rv[role + (i + 1)] = port;
+			});
+		}
+	}
+	return rv;
+}
+
+let ubus_methods = {
+	devices: {
+		call: function(req) {
+			if (req.args.arp)
+				arp_discover();
+			return update_devices_db();
+		},
+		args: {
+			arp: true
+		}
+	},
+	device_hostname: {
+		call: function(req) {
+			if (!req.args.mac || !req.args.hostname)
+				return ubus.STATUS_INVALID_ARGUMENT;
+			let mac = lc(req.args.mac);
+			if (!devices_db[mac])
+				return ubus.STATUS_INVALID_ARGUMENT;
+			devices_db[mac].name = req.args.hostname;
+			writefile('/etc/uconfig/devices/' + mac, devices_db[mac]);
+			return ubus.STATUS_OK;
+		},
+		args: {
+			mac: '00:00:00:00:00:00',
+			hostname: 'hostanme',
+		}
+	},
+	device_ignore: {
+		call: function(req) {
+			if (!req.args.mac)
+				return ubus.STATUS_INVALID_ARGUMENT;
+			let mac = lc(req.args.mac);
+			if (!devices_db[mac])
+				return ubus.STATUS_INVALID_ARGUMENT;
+			devices_db[mac].ignore = true;
+			writefile('/etc/uconfig/devices/' + mac, devices_db[mac]);
+			return ubus.STATUS_OK;
+		},
+		args: {
+			mac: '00:00:00:00:00:00',
+			hostname: 'hostanme',
+		}
+	},
+	device_delete: {
+		call: function(req) {
+			if (!req.args.mac)
+				return ubus.STATUS_INVALID_ARGUMENT;
+			let mac = lc(req.args.mac);
+			if (!devices_db[mac])
+				return ubus.STATUS_INVALID_ARGUMENT;
+			unlink('/etc/uconfig/devices/' + mac);
+			delete devices_db[mac];
+			return ubus.STATUS_OK;
+		},
+		args: {
+			mac: '00:00:00:00:00:00',
+		}
+	},
+	ports: {
+		call: function(req) {
+			return ports(req.args);
+		},
+		args: {
+			network: '',
+		}
+	},
+	radios: {
+		call: function(req) {
+			return radios();
+		},
+		args: {
+		}
+	},
+	fingerprint_update: {
+		call: function(req) {
+			update_fingerprint();
+			return 0;
+		},
+		args: {
+		}
+	},
+	traffic: {
+		call: function() {
+			return {
+				up: wan_traffic.up,
+				down: wan_traffic.down,
+			};
+		},
+		args: {
+		}
+	},
+};
+
+load_devices_db();
+
+uloop.init();
+ubus.publish('state', ubus_methods);
+let update_fingerprintInterval;
+update_fingerprintInterval = uloop.interval(5 * 60 * 1000, () => {
+	update_fingerprint();
+	update_devices_db();
+});
+
+uloop.interval(10 * 1000, () => {
+	traffic();
+});
+
+uloop.run();
+uloop.done();

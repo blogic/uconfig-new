@@ -1,0 +1,20 @@
+$module: uconfig-mod-tailscale
+type: object
+description:
+  This section can be used to configure the Tailscale VPN service
+properties:
+  auto-start:
+    description:
+      Automatically start the Tailscale tunnel when the device boots
+    type: boolean
+    default: false
+  exit-node:
+    description:
+      Advertise this device as an exit node for the Tailnet
+    type: boolean
+    default: false
+  announce-routes:
+    description:
+      Announce LAN routes to the Tailnet
+    type: boolean
+    default: false

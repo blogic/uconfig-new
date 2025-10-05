@@ -1,0 +1,20 @@
+description:
+  This section describes the vlan behaviour of a logical network interface.
+type: object
+properties:
+  id:
+    description:
+      This is the pvid of the vlan that shall be assigned to the interface.
+      The individual physical network devices contained within the interface
+      need to be told explicitly if egress traffic shall be tagged.
+    type: integer
+    maximum: 4050
+  trunks:
+    description:
+      Upstream interfaces can prOvide NAT for downstream interfaces that have a
+      different VLAN Id
+    type: array
+    items:
+      type: number
+      maximum: 4050
+      minimum: 1

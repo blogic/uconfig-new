@@ -1,0 +1,50 @@
+{
+	"uuid": 2,
+
+	"radios": {
+		"2G": {
+			"channel-mode": "HE",
+			"channel-width": 20
+		},
+		"5G": {
+			"channel-mode": "HE",
+			"channel-width": 80,
+			"channel": 36
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"wan*": "auto",
+				"lan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			},
+			"ssids": {
+				"main": {
+					"template": {
+						"mode": "enterprise",
+						"security": "maximum"
+					},
+					"ssid": "OpenWrt-wpa2",
+					"wifi-radios": [
+						"2G", "5G"
+					]
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

@@ -1,0 +1,32 @@
+description:
+  A RADIUS user for authentication.
+type: object
+properties:
+  auth-type:
+    description:
+      Authentication type for this user.
+    type: string
+    enum:
+    - password
+    - certificate
+    - both
+    default: password
+  password:
+    description:
+      User password for password-based authentication.
+    type: string
+    minLength: 1
+  vlan-id:
+    description:
+      VLAN ID to assign to this user.
+    type: integer
+    minimum: 1
+    maximum: 4094
+  rate-limit-upload:
+    description:
+      Upload rate limit in kbps.
+    type: integer
+  rate-limit-download:
+    description:
+      Download rate limit in kbps.
+    type: integer
