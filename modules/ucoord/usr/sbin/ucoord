@@ -1,0 +1,696 @@
+#!/usr/bin/env ucode
+
+'use strict';
+
+import { readfile, writefile, lsdir, unlink, mkdir, access } from 'fs';
+import * as unetmsg from 'unetmsg.client';
+import * as libubus from 'ubus';
+import * as uloop from 'uloop';
+import * as wiphy from 'uconfig.wiphy';
+
+uloop.init();
+let ubus = libubus.connect();
+
+if (ubus.call('ucoord', 'status')) {
+	warn('daemon is already running\n');
+	exit(1);
+}
+
+let chan = unetmsg.open(ubus);
+let capabilities = {};
+//let capabilities = json(readfile('/etc/uconfig/capabilities.json')) ?? {};
+let venues = {};
+let pending = {};
+let next_id = 0;
+const VENUE_PREFIX = 'ucoord_';
+const DEFAULT_TIMEOUT = 3000;
+const PENDING_CONFIG_PATH = '/tmp/uconfig.pending';
+const ACTIVE_CONFIG_PATH = '/etc/uconfig/configs/uconfig.active';
+const INCLUDE_DIR = '/etc/ucoord/configs';
+
+function venue_name_add(name) {
+	return VENUE_PREFIX + name;
+}
+
+function venue_name_strip(name) {
+	return replace(name, /^ucoord_/, '');
+}
+
+function include_list_get() {
+	let files = lsdir(INCLUDE_DIR);
+	if (!files)
+		return {};
+
+	let result = {};
+	for (let file in files) {
+		if (!match(file, /\.json$/))
+			continue;
+
+		let data = readfile(`${INCLUDE_DIR}/${file}`);
+		if (!data)
+			continue;
+
+		let content = json(data);
+		if (!content?.uuid)
+			continue;
+
+		result[replace(file, /\.json$/, '')] = content.uuid;
+	}
+	return result;
+}
+
+function include_data_get() {
+	let files = lsdir(INCLUDE_DIR);
+	if (!files)
+		return {};
+
+	let result = {};
+	for (let file in files) {
+		if (!match(file, /\.json$/))
+			continue;
+
+		let data = readfile(`${INCLUDE_DIR}/${file}`);
+		if (!data)
+			continue;
+
+		let content = json(data);
+		if (!content?.uuid)
+			continue;
+
+		result[replace(file, /\.json$/, '')] = content;
+	}
+	return result;
+}
+
+function include_get(name) {
+	let data = readfile(`${INCLUDE_DIR}/${name}.json`);
+	if (!data)
+		return null;
+	return json(data);
+}
+
+function include_set(name, content) {
+	if (!access(INCLUDE_DIR, 'r'))
+		mkdir(INCLUDE_DIR);
+	writefile(`${INCLUDE_DIR}/${name}.json`, sprintf('%.J', content));
+}
+
+function include_delete(name) {
+	unlink(`${INCLUDE_DIR}/${name}.json`);
+}
+
+function peers_dump() {
+	let result = {};
+	for (let name, venue in venues)
+		result[name] = venue.peers;
+	warn(`peers: ${sprintf('%.J', result)}\n`);
+}
+
+function venue_peers_reset(venue) {
+	for (let name in venue.peers)
+		venue.peers[name].state = 'pending';
+}
+
+function venue_announce_send(name, state, edit_data) {
+	let board = ubus.call('system', 'board');
+	let includes = include_list_get();
+	let announce = { capabilities, state, board, includes };
+	if (edit_data) {
+		announce.include_edit = true;
+		announce.include_data = edit_data;
+	}
+	chan.send(name, 'announce', announce);
+
+	let venue = venues[name];
+	if (venue && !venue.local_host) {
+		let unetd_info = ubus.call('unetd', 'network_get');
+		venue.local_host = unetd_info?.networks?.[name]?.local_host;
+	}
+	if (venue?.local_host)
+		venue.peers[venue.local_host] = { state, ts: time(), capabilities, board, includes };
+}
+
+function peer_find(venue_name, peer_name) {
+	let venue = venues[venue_name];
+	if (!venue)
+		return { ok: false, error: 'unknown venue' };
+
+	let peer = venue.peers[peer_name];
+	if (!peer)
+		return { ok: false, error: 'unknown peer' };
+
+	if (peer.state != 'connected')
+		return { ok: false, error: 'peer is not connected' };
+
+	return { ok: true, venue: venue_name, peer: peer_name };
+}
+
+function request_send(peer_name, venue_name, method, data, timeout, cb) {
+	let id = ++next_id;
+	chan.send_host(peer_name, venue_name, method, { id, ...data });
+	let timer = uloop.timer(timeout, () => {
+		delete pending[id];
+		cb({ id, ok: false, error: 'timeout' });
+	});
+	pending[id] = { cb, timer };
+}
+
+function response_handle(data) {
+	let entry = pending[data?.id];
+	if (!entry)
+		return;
+
+	entry.timer.cancel();
+	delete pending[data.id];
+	entry.cb(data);
+}
+
+let handlers = {};
+
+handlers.info = function(data) {
+	let sys_info = ubus.call('system', 'info');
+	if (!sys_info)
+		return { ok: false, error: 'ubus call failed' };
+	return { ok: true, data: sys_info };
+};
+
+function config_apply_result() {
+	let content = readfile('/tmp/uconfig/apply.json');
+	if (!content)
+		return {};
+	return json(content) ?? {};
+}
+
+handlers.configure = function(data) {
+	let action = data?.action;
+
+	if (action == 'get') {
+		let content = readfile('/etc/uconfig/configs/uconfig.active');
+		if (!content)
+			return { ok: false, error: 'no active config' };
+		let config = json(content);
+		if (!config)
+			return { ok: false, error: 'failed to parse active config' };
+		return { ok: true, data: config };
+	}
+
+	let config = data?.config;
+	if (!config)
+		return { ok: false, error: 'missing config' };
+
+	let path = PENDING_CONFIG_PATH;
+	writefile(path, sprintf('%.J', config));
+
+	if (action == 'test') {
+		let ret = system(`uconfig_apply -t ${path}`);
+		if (ret != 0)
+			return { ok: false, error: 'config test failed' };
+		return { ok: true, data: config_apply_result() };
+	}
+
+	if (action == 'apply') {
+		let ret = system(`uconfig_apply -t ${path}`);
+		if (ret != 0)
+			return { ok: false, error: 'config test failed' };
+		return { ok: true, apply: true, data: config_apply_result() };
+	}
+
+	return { ok: false, error: 'unknown action' };
+};
+
+handlers.include_request = function(data) {
+	let names = data?.names;
+	if (type(names) != 'array')
+		return { ok: false, error: 'missing names' };
+
+	let result = {};
+	for (let name in names) {
+		let content = include_get(name);
+		if (content)
+			result[name] = content;
+	}
+	return { ok: true, data: result };
+};
+
+handlers.capabilities = function(data) {
+	let capa = json(readfile('/etc/uconfig/capabilities.json'));
+	if (!capa)
+		return { ok: false, error: 'capabilities not available' };
+
+	return { ok: true, data: { capabilities: capa, wiphy: wiphy.phys } };
+};
+
+handlers.sysupgrade = function(data) {
+	let action = data?.action;
+	let url = data?.url;
+
+	if (!url)
+		return { ok: false, error: 'missing url' };
+
+	let path = '/tmp/sysupgrade.img';
+	let ret = system(`uclient-fetch -q -o ${path} ${url}`);
+	if (ret != 0) {
+		unlink(path);
+		return { ok: false, error: 'download failed' };
+	}
+
+	ret = system(`sysupgrade -T ${path}`);
+	if (ret != 0) {
+		unlink(path);
+		return { ok: false, error: 'image validation failed' };
+	}
+
+	if (action == 'test') {
+		unlink(path);
+		return { ok: true };
+	}
+
+	return { ok: true, upgrade: true };
+};
+
+function config_apply_deferred(venue_name, path) {
+	venue_announce_send(venue_name, 'reconfiguring');
+	uloop.timer(5000, () => {
+		system(`uconfig_apply ${path}`);
+		uloop.timer(5000, () => {
+			venue_announce_send(venue_name, 'connected');
+		});
+	});
+}
+
+function sysupgrade_deferred() {
+	for (let vname in venues)
+		venue_announce_send(vname, 'upgrading');
+	uloop.timer(5000, () => {
+		system('sysupgrade /tmp/sysupgrade.img');
+	});
+}
+
+function include_apply(venue_name, includes, include_data) {
+	let changed;
+	let local = include_list_get();
+
+	for (let name, content in include_data) {
+		if (local[name] == content.uuid)
+			continue;
+		include_set(name, content);
+		changed = true;
+	}
+
+	for (let name in local) {
+		if (name in includes)
+			continue;
+		include_delete(name);
+		changed = true;
+	}
+
+	if (changed)
+		config_apply_deferred(venue_name, ACTIVE_CONFIG_PATH);
+}
+
+function include_sync(venue_name) {
+	let venue = venues[venue_name];
+	if (!venue)
+		return;
+
+	let local = include_list_get();
+	let best = {};
+
+	for (let host, peer in venue.peers) {
+		if (!peer.includes)
+			continue;
+		for (let name, uuid in peer.includes) {
+			if (!best[name] || uuid > best[name].uuid)
+				best[name] = { uuid, host };
+		}
+	}
+
+	let needed = [];
+	let peer_count = {};
+	for (let name, entry in best) {
+		if (local[name] && local[name] >= entry.uuid)
+			continue;
+		push(needed, name);
+		peer_count[entry.host] = (peer_count[entry.host] ?? 0) + 1;
+	}
+
+	let to_delete = [];
+	for (let name in local) {
+		if (name in best)
+			continue;
+		push(to_delete, name);
+	}
+
+	if (!length(needed) && !length(to_delete))
+		return;
+
+	if (!length(needed)) {
+		for (let name in to_delete)
+			include_delete(name);
+		config_apply_deferred(venue_name, ACTIVE_CONFIG_PATH);
+		return;
+	}
+
+	let best_peer;
+	let best_count = 0;
+	for (let host, count in peer_count) {
+		if (count <= best_count)
+			continue;
+		best_peer = host;
+		best_count = count;
+	}
+
+	request_send(best_peer, venue_name, 'include_request', { names: needed },
+		DEFAULT_TIMEOUT, (resp) => {
+			if (!resp.ok)
+				return;
+
+			for (let name, content in resp.data)
+				include_set(name, content);
+
+			for (let name in to_delete)
+				include_delete(name);
+
+			config_apply_deferred(venue_name, ACTIVE_CONFIG_PATH);
+		});
+}
+
+function peer_request(venue_name, peer_name, method, data, timeout, cb) {
+	let result = peer_find(venue_name, peer_name);
+	if (!result.ok) {
+		cb(result);
+		return;
+	}
+
+	let venue = venues[venue_name];
+	if (venue.local_host == peer_name) {
+		let result = handlers[method](data);
+		cb(result);
+		if (result.apply)
+			config_apply_deferred(venue_name, PENDING_CONFIG_PATH);
+		if (result.upgrade)
+			sysupgrade_deferred();
+		return;
+	}
+
+	request_send(peer_name, venue_name, method, data, timeout, cb);
+}
+
+function acl_load(network_name, unetd_networks) {
+	let net_info = unetd_networks[network_name];
+	if (!net_info)
+		return {};
+
+	let authorized = {};
+	for (let svc_name, svc in net_info.services) {
+		if (svc.type != 'ucoord')
+			continue;
+		for (let member in svc.members)
+			authorized[member] = true;
+	}
+	return authorized;
+}
+
+function peer_authorized(venue_name, host) {
+	let venue = venues[venue_name];
+	if (!venue)
+		return false;
+
+	if (!length(venue.authorized))
+		return true;
+
+	return !!venue.authorized[host];
+}
+
+function venue_add(name, local_host) {
+	if (venues[name]) {
+		venues[name].local_host = local_host;
+		return;
+	}
+
+	let venue = venues[name] = {
+		peers: {},
+		announced: false,
+		authorized: {},
+		local_host,
+	};
+
+	chan.publish(name, (req) => {
+		return { name: chan.id, ts: time() };
+	});
+
+	chan.subscribe(name, (req) => {
+		let args = req.args;
+
+		switch (args.type) {
+		case 'announce':
+			let host = args.host;
+			let state = args.data?.state;
+	
+			if (!host)
+				return;
+
+			warn(`received announce from ${host}\n`);
+			if (!state) {
+				warn(`announce from ${host}: missing state\n`);
+				break;
+			}
+			if (venue.peers[host]?.state == state)
+				break;
+
+			if (state in ['rebooting', 'upgrading'])
+				venue.peers[host] = { state, ts: time() };
+			else
+				venue.peers[host] = { state, ts: time(), capabilities: args.data?.capabilities, board: args.data?.board, includes: args.data?.includes };
+			peers_dump();
+
+			if (!venue.announced) {
+				warn('sending initial announce\n');
+				uloop.timer(500, () => venue_announce_send(name, 'connected'));
+				venue.announced = true;
+			}
+
+			if (args.data?.include_edit) {
+				include_apply(name, args.data.includes, args.data.include_data);
+			} else {
+				if (venue.sync_timer)
+					venue.sync_timer.cancel();
+				venue.sync_timer = uloop.timer(2000, () => include_sync(name));
+			}
+			break;
+		case 'response':
+			response_handle(args.data);
+			break;
+		case 'reboot':
+			if (!peer_authorized(name, args.host)) {
+				warn(`rejected reboot from unauthorized peer ${args.host}\n`);
+				break;
+			}
+			warn('peer list has changed\n');
+			for (let vname in venues)
+				venue_announce_send(vname, 'rebooting');
+			uloop.timer(5000, () => system('reboot'));
+			break;
+		default:
+			let handler = handlers[args.type];
+			if (!handler)
+				break;
+			let req_id = args.data?.id;
+			let req_host = args.host;
+			if (!req_id || !req_host)
+				break;
+			if (!peer_authorized(name, req_host)) {
+				warn(`rejected ${args.type} from unauthorized peer ${req_host}\n`);
+				chan.send_host(req_host, name, 'response', { id: req_id, ok: false, error: 'unauthorized' });
+				break;
+			}
+			let result = handler(args.data);
+			chan.send_host(req_host, name, 'response', { id: req_id, ...result });
+			if (result.apply)
+				config_apply_deferred(name, PENDING_CONFIG_PATH);
+			if (result.upgrade)
+				sysupgrade_deferred();
+			break;
+		}
+	}, () => {
+		warn('peer list changed, sending announce\n');
+		venue_peers_reset(venue);
+		venue_announce_send(name, 'connected');
+	});
+
+	venue_announce_send(name, 'connected');
+}
+
+function venue_remove(name) {
+	delete venues[name];
+	delete chan.cb_pub[name];
+	delete chan.cb_sub[name];
+}
+
+function config_reload() {
+	let data = readfile('/etc/uconfig/data/unetd.json');
+	let config = data ? json(data) : {};
+	let networks = config?.networks ?? {};
+	let unetd_info = ubus.call('unetd', 'network_get');
+	let unetd_networks = unetd_info?.networks ?? {};
+
+	for (let name in venues)
+		if (!networks[name])
+			venue_remove(name);
+
+	for (let name in networks)
+		venue_add(name, unetd_networks[name]?.local_host);
+
+	for (let name, venue in venues)
+		venue.authorized = acl_load(name, unetd_networks);
+}
+
+config_reload();
+
+ubus.publish('ucoord', {
+	status: {
+		call: function(req) {
+			let result = {};
+			for (let name, venue in venues)
+				result[venue_name_strip(name)] = venue.peers;
+			return { venues: result };
+		}
+	},
+	reload: {
+		call: function(req) {
+			config_reload();
+			return { venues: map(keys(venues), venue_name_strip) };
+		}
+	},
+	reboot: {
+		call: function(req) {
+			let venue = venue_name_add(req.args.venue);
+			let result = peer_find(venue, req.args.peer);
+			if (!result.ok)
+				return result;
+
+			chan.send_host(req.args.peer, venue, 'reboot', {});
+			return result;
+		},
+		args: {
+			venue: "",
+			peer: ""
+		}
+	},
+	sysupgrade: {
+		call: function(req) {
+			req.defer();
+			let data = { action: req.args.action, url: req.args.url };
+			peer_request(venue_name_add(req.args.venue), req.args.peer, 'sysupgrade', data,
+				req.args.timeout ?? DEFAULT_TIMEOUT, (resp) => {
+					req.reply(resp);
+				});
+			return req;
+		},
+		args: {
+			venue: "",
+			peer: "",
+			action: "",
+			url: "",
+			timeout: 0
+		}
+	},
+	configure: {
+		call: function(req) {
+			req.defer();
+			let data = { action: req.args.action };
+			if (req.args.config)
+				data.config = req.args.config;
+			peer_request(venue_name_add(req.args.venue), req.args.peer, 'configure', data,
+				req.args.timeout ?? DEFAULT_TIMEOUT, (resp) => {
+					req.reply(resp);
+				});
+			return req;
+		},
+		args: {
+			venue: "",
+			peer: "",
+			action: "",
+			config: {},
+			timeout: 0
+		}
+	},
+	info: {
+		call: function(req) {
+			req.defer();
+			peer_request(venue_name_add(req.args.venue), req.args.peer, 'info', {},
+				req.args.timeout ?? DEFAULT_TIMEOUT, (resp) => {
+					req.reply(resp);
+				});
+			return req;
+		},
+		args: {
+			venue: "",
+			peer: "",
+			timeout: 0
+		}
+	},
+	capabilities: {
+		call: function(req) {
+			req.defer();
+			peer_request(venue_name_add(req.args.venue), req.args.peer, 'capabilities', {},
+				req.args.timeout ?? DEFAULT_TIMEOUT, (resp) => {
+					req.reply(resp);
+				});
+			return req;
+		},
+		args: {
+			venue: "",
+			peer: "",
+			timeout: 0
+		}
+	},
+	include: {
+		call: function(req) {
+			let action = req.args.action;
+			let name = req.args.name;
+
+			if (action == 'list')
+				return { ok: true, data: include_list_get() };
+
+			if (!name)
+				return { ok: false, error: 'missing name' };
+
+			if (action == 'get') {
+				let content = include_get(name);
+				if (!content)
+					return { ok: false, error: 'include not found' };
+				return { ok: true, data: content };
+			}
+
+			if (action == 'set') {
+				let content = req.args.content;
+				if (type(content) != 'object')
+					return { ok: false, error: 'invalid content' };
+				content.uuid = time();
+				include_set(name, content);
+			} else if (action == 'delete') {
+				include_delete(name);
+			} else {
+				return { ok: false, error: 'unknown action' };
+			}
+
+			let venue_name = venue_name_add(req.args.venue);
+			if (venues[venue_name])
+				venue_announce_send(venue_name, 'connected', include_data_get());
+
+			config_apply_deferred(venue_name, ACTIVE_CONFIG_PATH);
+			return { ok: true };
+		},
+		args: {
+			venue: "",
+			action: "",
+			name: "",
+			content: {},
+			timeout: 0
+		}
+	}
+});
+
+warn('peer: running\n');
+uloop.run();
