@@ -1,0 +1,522 @@
+#!/usr/bin/env ucode
+'use strict';
+
+import { readfile, writefile, mkdir, stat, popen } from 'fs';
+import * as uline from 'uline';
+import { phys as wiphy_phys } from 'uconfig.wiphy';
+import { crypt } from 'uconfig.utils';
+import * as math from 'math';
+
+function modem_detect() {
+	let p = popen('mmcli -m 0 2>/dev/null', 'r');
+	if (!p)
+		return null;
+
+	let device;
+	let line;
+	while ((line = p.read('line')) != null) {
+		let m = match(trim(line), /device: (.+)/);
+		if (m)
+			device = m[1];
+	}
+	p.close();
+
+	return device;
+}
+
+math.srand(time());
+
+let el = uline.new({
+	cb: {
+		eof: () => { warn('\n'); exit(1); },
+		interrupt: () => { warn('\n'); exit(1); },
+	}
+});
+
+function is_module_available(name) {
+	return stat('/etc/uconfig/modules/' + name) != null;
+}
+
+function random_salt(len) {
+	let chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./';
+	let str = '';
+	for (let i = 0; i < len; i++)
+		str += substr(chars, math.rand() % length(chars), 1);
+	return str;
+}
+
+function line_read(prompt) {
+	el.set_state({ prompt });
+	let line = el.poll();
+	if (line == null)
+		exit(1);
+	return trim(line);
+}
+
+function prompt_choice(question, options, dflt) {
+	while (true) {
+		warn(question + '\n');
+		for (let i = 0; i < length(options); i++)
+			warn(sprintf('  [%d] %s\n', i + 1, options[i]));
+
+		let suffix = dflt != null ? sprintf(' (default: %d)', dflt) : '';
+		let line = line_read(sprintf('Choice [1-%d]%s: ', length(options), suffix));
+		if (line == '' && dflt != null)
+			return dflt - 1;
+
+		let choice = +line;
+		if (choice >= 1 && choice <= length(options))
+			return choice - 1;
+
+		warn('Invalid choice, try again.\n\n');
+	}
+}
+
+function prompt_yn(question, dflt) {
+	let hint = dflt ? '[Y/n]' : '[y/N]';
+	while (true) {
+		warn(sprintf('%s %s: ', question, hint));
+
+		let c = el.poll_key(-1);
+		if (c == null)
+			exit(1);
+
+		if (c == '\r' || c == '\n') {
+			warn(dflt ? 'y\n' : 'n\n');
+			return dflt;
+		}
+
+		warn(c + '\n');
+
+		if (lc(c) == 'y')
+			return true;
+		if (lc(c) == 'n')
+			return false;
+
+		warn('Please answer y or n.\n');
+	}
+}
+
+function prompt_string(question, dflt, min_len, max_len) {
+	let hint = dflt ? sprintf(' [%s]', dflt) : '';
+	while (true) {
+		let line = line_read(sprintf('%s%s: ', question, hint));
+		if (line == '' && dflt)
+			return dflt;
+		if (length(line) >= min_len && length(line) <= max_len)
+			return line;
+
+		warn(sprintf('Input must be %d-%d characters.\n', min_len, max_len));
+	}
+}
+
+function prompt_optional(question) {
+	let line = line_read(question + ': ');
+	return length(line) ? line : null;
+}
+
+function prompt_optional_password(prompt) {
+	let pw = uline.getpass(prompt);
+	if (pw == null)
+		exit(1);
+	return length(pw) ? pw : null;
+}
+
+function prompt_password(prompt, min_len, max_len) {
+	while (true) {
+		let pw = uline.getpass(prompt);
+		if (pw == null)
+			exit(1);
+		if (length(pw) >= min_len && length(pw) <= max_len)
+			return pw;
+
+		warn(sprintf('Must be %d-%d characters.\n', min_len, max_len));
+	}
+}
+
+let mode_idx = prompt_choice('Device mode', [
+	'Access Point (all ports bridged, DHCP client)',
+	'Router (WAN + LAN, NAT, DHCP server)',
+], null);
+let is_router = (mode_idx == 1);
+
+let wan_type = 'ethernet';
+let pppoe_config, wwan_config;
+let modem_device;
+
+if (is_router) {
+	if (is_module_available('wwan'))
+		modem_device = modem_detect();
+
+	let wan_options = ['Ethernet', 'PPPoE'];
+	if (modem_device)
+		push(wan_options, 'WWAN (5G/LTE)');
+
+	warn('\n');
+	let wan_idx = prompt_choice('WAN connection type', wan_options, null);
+	if (wan_idx == 1)
+		wan_type = 'pppoe';
+	else if (wan_idx == 2)
+		wan_type = 'wwan';
+}
+
+if (wan_type == 'pppoe') {
+	warn('\n');
+	let username = prompt_string('PPPoE username', null, 1, 128);
+	let password = prompt_password('PPPoE password: ', 1, 128);
+	let vlan_str = prompt_optional('PPPoE VLAN ID (leave blank if none)');
+	let vlan_id = vlan_str ? +vlan_str : null;
+
+	pppoe_config = { username, password };
+	if (vlan_id)
+		pppoe_config.vlan_id = vlan_id;
+}
+
+if (wan_type == 'wwan') {
+	warn('\n');
+	let apn = prompt_string('APN', null, 1, 128);
+	let username = prompt_optional('Username (leave blank if none)');
+	let password = prompt_optional_password('Password (leave blank if none): ');
+	let pincode = prompt_optional_password('SIM PIN code (leave blank if none): ');
+
+	wwan_config = { device: modem_device, apn, 'ip-type': 'ipv4v6' };
+	if (username)
+		wwan_config.username = username;
+	if (password)
+		wwan_config.password = password;
+	if (pincode)
+		wwan_config.pincode = pincode;
+}
+
+let password_hash;
+warn('\n');
+if (prompt_yn('Set root password?', true)) {
+	let pw = prompt_password('Password: ', 5, 63);
+	password_hash = crypt(pw, `$6$${random_salt(16)}`);
+}
+
+warn('\n');
+let hostname = prompt_string('Hostname', 'OpenWrt', 1, 10);
+
+let zoneinfo = json(readfile('/usr/share/ucode/uconfig/zoneinfo.json'));
+if (!zoneinfo) {
+	warn('Failed to read timezone data\n');
+	exit(1);
+}
+
+let regions = {};
+for (let key in keys(zoneinfo)) {
+	let parts = split(key, '/');
+	let region = parts[0];
+	let city = join('/', slice(parts, 1));
+	regions[region] ??= [];
+	push(regions[region], { key, city });
+}
+
+let region_names = sort(keys(regions));
+warn('\n');
+let region_idx = prompt_choice('Timezone region', region_names, null);
+let region = region_names[region_idx];
+
+let cities = regions[region];
+sort(cities, (a, b) => (a.city > b.city) - (a.city < b.city));
+let city_names = map(cities, c => c.city);
+
+warn('\n');
+let city_idx = prompt_choice('Timezone city', city_names, null);
+let timezone = cities[city_idx].key;
+
+let channel_mode_priority = ['EHT', 'HE', 'VHT', 'HT'];
+
+function best_channel_mode(modes) {
+	for (let prio in channel_mode_priority)
+		for (let m in modes)
+			if (substr(m, 0, length(prio)) == prio)
+				return prio;
+	return null;
+}
+
+function radios_discover() {
+	if (!length(wiphy_phys))
+		return {};
+
+	let radios = {};
+	let seen = {};
+
+	for (let phy in wiphy_phys) {
+		for (let band_name, band_info in phy.bands) {
+			if (seen[band_name])
+				continue;
+			seen[band_name] = true;
+
+			let mode = best_channel_mode(band_info.modes);
+			if (!mode)
+				continue;
+
+			let radio = { 'channel-mode': mode };
+
+			if (band_name == '2G') {
+				radio['channel-width'] = 20;
+			} else if (band_name == '5G') {
+				radio['channel-width'] = 80;
+				radio.channel = 36;
+			} else if (band_name == '6G') {
+				radio['channel-width'] = 160;
+			}
+
+			radios[band_name] = radio;
+		}
+	}
+
+	return radios;
+}
+
+let radios = radios_discover();
+let ssid_config;
+
+if (length(radios)) {
+	warn('\n');
+	if (prompt_yn('Configure wireless?', true)) {
+		let ssid_name = prompt_string('SSID', 'OpenWrt', 1, 32);
+
+		let sec_idx = prompt_choice('Security', [
+			'Maximum (WPA3 only, newest devices)',
+			'Compatibility (WPA2/WPA3 mixed)',
+		], null);
+		let security = sec_idx == 0 ? 'maximum' : 'compatibility';
+
+		let key = prompt_password('Password: ', 8, 63);
+
+		ssid_config = {
+			ssid: ssid_name,
+			security,
+			key,
+			bands: sort(keys(radios)),
+		};
+	}
+}
+
+let mesh_config;
+let mesh_radio = radios['5G'] ? '5G' : (radios['2G'] ? '2G' : null);
+let can_mesh = is_module_available('batman-adv') && mesh_radio &&
+               (wan_type == 'ethernet' || !is_router);
+
+if (can_mesh) {
+	warn('\n');
+	if (prompt_yn('Enable batman-adv mesh backhaul?', false)) {
+		let mesh_ssid = prompt_string('Mesh SSID', 'mesh', 1, 32);
+		let mesh_key = prompt_password('Mesh key: ', 8, 63);
+		mesh_config = {
+			ssid: mesh_ssid,
+			key: mesh_key,
+			radio: mesh_radio,
+		};
+	}
+}
+
+warn('\n');
+let enable_ssh = prompt_yn('Enable SSH?', true);
+
+let enable_mdns;
+if (is_module_available('mdns'))
+	enable_mdns = prompt_yn('Enable mDNS?', true);
+
+let enable_lldp;
+if (is_module_available('lldp'))
+	enable_lldp = prompt_yn('Enable LLDP?', false);
+
+let enable_qos;
+if (is_module_available('qosify'))
+	enable_qos = prompt_yn('Enable QoS?', true);
+
+let services_list = [];
+if (enable_ssh)
+	push(services_list, 'ssh');
+if (enable_mdns)
+	push(services_list, 'mdns');
+if (enable_lldp)
+	push(services_list, 'lldp');
+if (enable_qos)
+	push(services_list, 'quality-of-service');
+
+let config = {
+	uuid: 2,
+	unit: {
+		hostname,
+		timezone,
+	},
+};
+
+if (password_hash)
+	config.unit.password = password_hash;
+
+if (ssid_config)
+	config.radios = radios;
+
+function ssid_block() {
+	let ssids = {
+		main: {
+			ssid: ssid_config.ssid,
+			'wifi-radios': ssid_config.bands,
+			template: {
+				mode: 'encrypted',
+				security: ssid_config.security,
+				key: ssid_config.key,
+			},
+		},
+	};
+
+	if (mesh_config) {
+		ssids.mesh = {
+			ssid: mesh_config.ssid,
+			'wifi-radios': [mesh_config.radio],
+			'bss-mode': 'mesh',
+			template: {
+				mode: 'batman-adv',
+				key: mesh_config.key,
+			},
+		};
+	}
+
+	return ssids;
+}
+
+if (is_router) {
+	let wan = {};
+	wan.role = 'upstream';
+
+	if (wan_type == 'pppoe') {
+		wan.ports = { 'wan*': 'auto' };
+		if (pppoe_config.vlan_id)
+			wan.vlan = { id: pppoe_config.vlan_id };
+		wan['broad-band'] = {
+			type: 'pppoe',
+			username: pppoe_config.username,
+			password: pppoe_config.password,
+		};
+	} else if (wan_type == 'wwan') {
+		let bb = {
+			type: 'wwan',
+			device: wwan_config.device,
+			apn: wwan_config.apn,
+			'ip-type': wwan_config['ip-type'],
+		};
+		if (wwan_config.username)
+			bb.username = wwan_config.username;
+		if (wwan_config.password)
+			bb.password = wwan_config.password;
+		if (wwan_config.pincode)
+			bb.pincode = wwan_config.pincode;
+		wan['broad-band'] = bb;
+	} else {
+		wan.ports = { 'wan*': 'auto' };
+		wan.ipv4 = { addressing: 'dynamic' };
+		wan.ipv6 = { addressing: 'dynamic' };
+	}
+
+	if (enable_qos)
+		wan['quality-of-service'] = { 'bandwidth-up': 1000, 'bandwidth-down': 1000 };
+
+	let lan = {};
+	lan.role = 'downstream';
+	if (length(services_list))
+		lan.services = services_list;
+	lan.ports = { 'lan*': 'auto' };
+	lan.ipv4 = {
+		addressing: 'static',
+		subnet: '192.168.1.1/24',
+		'dhcp-pool': {
+			'lease-first': 10,
+			'lease-count': 100,
+			'lease-time': '6h',
+		},
+	};
+	lan.ipv6 = {
+		addressing: 'static',
+		dhcpv6: { mode: 'hybrid' },
+	};
+	if (ssid_config)
+		lan.ssids = ssid_block();
+
+	config.interfaces = { wan, lan };
+} else {
+	let wan = {};
+	wan.role = 'upstream';
+	if (length(services_list))
+		wan.services = services_list;
+	wan.ports = { 'wan*': 'auto', 'lan*': 'auto' };
+	wan.ipv4 = { addressing: 'dynamic' };
+	wan.ipv6 = { addressing: 'dynamic' };
+
+	if (enable_qos)
+		wan['quality-of-service'] = { 'bandwidth-up': 1000, 'bandwidth-down': 1000 };
+
+	if (ssid_config)
+		wan.ssids = ssid_block();
+
+	config.interfaces = { wan };
+}
+
+config.services = {};
+
+if (enable_ssh)
+	config.services.ssh = { port: 22 };
+
+if (enable_qos) {
+	let qos_db = json(readfile('/usr/share/ucode/uconfig/qos.json') || '{}');
+	config.services['quality-of-service'] = {
+		'bulk-detection': {
+			dscp: 'CS0',
+			'packets-per-second': 500,
+		},
+		services: sort(keys(qos_db.services ?? {})),
+	};
+}
+
+if (!length(keys(config.services)))
+	delete config.services;
+
+warn('\n--- Configuration summary ---\n');
+warn(sprintf('  Mode:      %s\n', is_router ? 'Router' : 'Access Point'));
+if (is_router) {
+	let wan_desc;
+	if (wan_type == 'pppoe')
+		wan_desc = sprintf('PPPoE (user: %s)', pppoe_config.username);
+	else if (wan_type == 'wwan')
+		wan_desc = sprintf('WWAN (apn: %s)', wwan_config.apn);
+	else
+		wan_desc = 'Ethernet';
+	warn(sprintf('  WAN:       %s\n', wan_desc));
+}
+warn(sprintf('  Password:  %s\n', password_hash ? 'set' : 'not set'));
+warn(sprintf('  Hostname:  %s\n', hostname));
+warn(sprintf('  Timezone:  %s\n', timezone));
+if (ssid_config) {
+	warn(sprintf('  SSID:      %s\n', ssid_config.ssid));
+	warn(sprintf('  Security:  %s\n', ssid_config.security));
+	warn(sprintf('  Radios:    %s\n', join(', ', ssid_config.bands)));
+} else {
+	warn('  Wireless:  disabled\n');
+}
+if (mesh_config)
+	warn(sprintf('  Mesh:      %s (%s)\n', mesh_config.ssid, mesh_config.radio));
+warn(sprintf('  SSH:       %s\n', enable_ssh ? 'enabled' : 'disabled'));
+if (is_module_available('mdns'))
+	warn(sprintf('  mDNS:      %s\n', enable_mdns ? 'enabled' : 'disabled'));
+if (is_module_available('lldp'))
+	warn(sprintf('  LLDP:      %s\n', enable_lldp ? 'enabled' : 'disabled'));
+if (is_module_available('qosify'))
+	warn(sprintf('  QoS:       %s\n', enable_qos ? 'enabled' : 'disabled'));
+
+mkdir('/tmp/uconfig');
+let config_path = sprintf('/tmp/uconfig/config.%d', time());
+writefile(config_path, sprintf('%.J\n', config));
+
+warn('\n');
+let apply = prompt_yn('Apply configuration now?', true);
+el.close();
+
+if (apply)
+	system(sprintf('uconfig_apply %s', config_path));
+else
+	warn(sprintf('Configuration saved to %s\n', config_path));

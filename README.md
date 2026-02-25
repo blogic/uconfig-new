@@ -143,6 +143,24 @@ The includes object and all include arrays are removed from
 the document before validation.
 
 
+## Setup Wizard
+
+The setup wizard (files/usr/bin/uconfig-wizard) provides a guided,
+interactive workflow for generating an initial uconfig configuration.
+It walks through device mode (access point or router), root password,
+hostname, timezone, wireless setup and services, then writes the
+resulting JSON to /tmp/uconfig/ and optionally applies it via
+uconfig_apply.
+
+Wireless radios are auto-discovered from the hardware; the wizard
+selects the best channel mode per band and applies fixed channel
+widths (20 MHz for 2G, 80 MHz for 5G, 160 MHz for 6G). The user
+only needs to provide an SSID, security level and password.
+
+```
+uconfig-wizard
+```
+
 ## CLI
 
 The interactive CLI (files/usr/share/ucode/cli/uconfig.uc and
