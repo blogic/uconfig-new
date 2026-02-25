@@ -92,8 +92,10 @@ A uconfig document is a JSON object with these top-level keys:
 YAML schema fragments live under schema/ with schema/uconfig.yml
 as the root. Run generate.sh to merge them into
 generated/schema.json and produce the runtime validation modules.
-If generate-schema-doc is on PATH, an HTML reference is also
-written to docs/uconfig-schema.html.
+
+The full schema reference is available as browsable HTML at
+https://blogic.github.io/uconfig-new/, it is rebuilt
+automatically on every push to main.
 
 
 ## Includes
