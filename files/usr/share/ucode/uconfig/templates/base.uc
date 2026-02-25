@@ -1,4 +1,11 @@
 {%
+	function needs_upstream_bridge() {
+		for (let name, iface in state.interfaces)
+			if (iface.role == 'upstream' && !iface.broad_band?.type)
+				return true;
+		return false;
+	}
+
 	// Configuration generation functions ordered by purpose
 
 	function generate_loopback_config() {
@@ -68,11 +75,15 @@
 {{ generate_loopback_config() }}
 
 ## Bridge configuration
+{%	if (needs_upstream_bridge()): %}
 {{ generate_upstream_bridge() }}
+{%	endif %}
 {{ generate_downstream_bridge() }}
 
+{%	if (needs_upstream_bridge()): %}
 ## WAN interface
 {{ generate_wan_interface() }}
+{%	endif %}
 
 ## MAC address configuration
 {%	for (let k, v in capabilities.macaddr): %}

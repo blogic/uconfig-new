@@ -63,6 +63,18 @@
 		return true;
 	}
 
+	function validate_broad_band_ports(interface, eth_ports) {
+		if (!interface.broad_band?.type)
+			return true;
+
+		if (length(keys(eth_ports)) > 1) {
+			warn('broad-band type requires a single port, interface has multiple');
+			return false;
+		}
+
+		return true;
+	}
+
 	function validate_downstream_vlan(interface, this_vid) {
 		if (!is_downstream_with_vlan(interface))
 			return true;
@@ -152,6 +164,9 @@
 	if (!validate_station_bridging(interface, bss_modes, eth_ports))
 		return;
 
+	if (!validate_broad_band_ports(interface, eth_ports))
+		return;
+
 	// match_ functions - value mapping/selection
 	function match_bridge_device(role) {
 		return BRIDGE_DEVICES[role] || 'br-lan';
@@ -173,6 +188,12 @@
 	let name = interface.name;
 	let bridgedev = match_bridge_device(interface.role);
 	let netdev = ethernet.calculate_name(interface);
+
+	if (interface.broad_band?.type) {
+		let port = keys(eth_ports)[0] ?? '';
+		netdev = port ? (this_vid ? `${port}.${this_vid}` : port) : '';
+	}
+
 	let network = name;
 	let ipv4_mode = match_addressing_mode(interface.ipv4);
 	let ipv6_mode = match_addressing_mode(interface.ipv6);
@@ -242,7 +263,8 @@
 		include('interface/common.uc', {
 			name, this_vid, netdev,
 			ipv4_mode, ipv4: interface.ipv4 || {},
-			ipv6_mode, ipv6: interface.ipv6 || {}
+			ipv6_mode, ipv6: interface.ipv6 || {},
+			broad_band: interface.broad_band || {}
 		});
 	}
 
@@ -301,14 +323,19 @@
 	}
 
 	// Main configuration generation
-	let batman_result = find_batman_interfaces();
+	if (interface.broad_band?.type) {
+		generate_common_config();
+		generate_firewall_config();
+	} else {
+		let batman_result = find_batman_interfaces();
 
-	generate_batman_config(batman_result);
-	generate_bridge_config(batman_result);
-	generate_common_config();
-	generate_firewall_config();
-	generate_ieee8021x_config();
-	generate_dhcp_config();
-	generate_ports_file();
-	generate_wifi_config();
+		generate_batman_config(batman_result);
+		generate_bridge_config(batman_result);
+		generate_common_config();
+		generate_firewall_config();
+		generate_ieee8021x_config();
+		generate_dhcp_config();
+		generate_ports_file();
+		generate_wifi_config();
+	}
 %}

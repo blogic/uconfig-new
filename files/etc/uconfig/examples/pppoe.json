@@ -1,0 +1,81 @@
+{
+	"uuid": 2,
+
+	"unit": {
+		"timezone": "Europe/Berlin"
+	},
+
+	"radios": {
+		"2G": {
+			"channel-mode": "HE",
+			"channel-width": 20
+		},
+		"5G": {
+			"channel-mode": "HE",
+			"channel-width": 80,
+			"channel": 36
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"ports": {
+				"wan*": "auto"
+			},
+			"vlan": {
+				"id": 7
+			},
+			"broad-band": {
+				"type": "pppoe",
+				"username": "user1",
+				"password": "password1"
+			}
+		},
+		"lan": {
+			"role": "downstream",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"lan*": "auto"
+			},
+
+			"ipv4": {
+				"addressing": "static",
+				"subnet": "192.168.11.1/24",
+				"dhcp-pool": {
+					"lease-first": 10,
+					"lease-count": 100,
+					"lease-time": "6h"
+				}
+			},
+
+			"ipv6": {
+				"addressing": "static",
+				"dhcpv6": {
+					"mode": "hybrid"
+				}
+			},
+
+			"ssids": {
+				"nat": {
+					"purpose": "system-defaults",
+					"ssid": "OpenWrt",
+					"wifi-radios": [
+						"2G", "5G"
+					],
+					"template": {
+						"mode": "encrypted",
+						"security": "compatibility",
+						"key": "aaaaaaaa"
+					}
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		}
+	}
+}

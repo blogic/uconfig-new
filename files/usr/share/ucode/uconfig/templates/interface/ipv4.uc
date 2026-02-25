@@ -9,7 +9,7 @@
 	}
 
 	function is_dhcp_mode(ipv4_mode) {
-		return ipv4_mode != 'static';
+		return ipv4_mode == 'dynamic';
 	}
 
 	// Configuration generation functions

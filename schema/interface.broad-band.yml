@@ -1,0 +1,52 @@
+description:
+  Broadband access credentials and connection parameters for upstream
+  interfaces (PPPoE, WWAN).
+type: object
+properties:
+  type:
+    description:
+      Broadband connection type. When set, ipv4/ipv6 addressing sections
+      are ignored and the connection is configured entirely from this section.
+    type: string
+    enum:
+      - pppoe
+      - wwan
+  device:
+    description:
+      Full sysfs path of the modem device for WWAN connections
+      (e.g. /sys/devices/platform/soc/20980000.usb/usb1/1-1).
+    type: string
+  apn:
+    description:
+      Access point name for cellular connections.
+    type: string
+  pincode:
+    description:
+      SIM card PIN code.
+    type: string
+  ip-type:
+    description:
+      IP version negotiated by the modem.
+    type: string
+    enum:
+      - ipv4
+      - ipv6
+      - ipv4v6
+    default: ipv4v6
+  username:
+    description:
+      Authentication username for the broadband connection.
+    type: string
+  password:
+    description:
+      Authentication password for the broadband connection.
+    type: string
+  service-name:
+    description:
+      PPPoE service name filter. Only connect to access concentrators
+      advertising this service.
+    type: string
+  ac-name:
+    description:
+      PPPoE access concentrator name filter.
+    type: string

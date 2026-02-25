@@ -1,5 +1,10 @@
 {%
 	// Constants
+	const BROAD_BAND_PROTOCOLS = {
+		pppoe: 'pppoe',
+		wwan: 'modemmanager',
+	};
+
 	const PROTOCOL_MODES = {
 		static: 'static',
 		dynamic_ipv4: 'dhcp',
@@ -30,6 +35,10 @@
 
 	// match_ functions - value mapping/selection
 	function match_protocol(ipv4_mode, ipv6_mode, afnames, afidx) {
+		let bb_proto = BROAD_BAND_PROTOCOLS[broad_band.type];
+		if (bb_proto)
+			return bb_proto;
+
 		if (is_static_mode(ipv4_mode, ipv6_mode))
 			return PROTOCOL_MODES.static;
 
@@ -68,7 +77,10 @@
 		uci_named_section(output, `network.${afname}`, 'interface');
 		uci_set_string(output, `network.${afname}.uconfig_name`, interface.name);
 		uci_set_string(output, `network.${afname}.uconfig_path`, location);
-		uci_set_string(output, `network.${afname}.device`, netdev);
+		if (broad_band.type)
+			uci_set_string(output, `network.${afname}.ifname`, netdev);
+		else
+			uci_set_string(output, `network.${afname}.device`, netdev);
 		uci_set_string(output, `network.${afname}.type`, interface.type);
 		uci_set_string(output, `network.${afname}.proto`,
 			match_protocol(ipv4_mode, ipv6_mode, afnames, afidx));
@@ -91,6 +103,9 @@
 	}
 
 	function generate_ipv4_config(afname, afnames, afidx) {
+		if (broad_band.type)
+			return '';
+
 		if (!is_ipv4_interface(ipv4_mode, afnames, afidx))
 			return '';
 
@@ -99,7 +114,19 @@
 		return '';
 	}
 
+	function generate_broad_band_config(afname, afnames, afidx) {
+		if (!broad_band.type)
+			return '';
+
+		include('broad-band.uc', { name: afname });
+
+		return '';
+	}
+
 	function generate_ipv6_config(afname, afnames, afidx) {
+		if (broad_band.type)
+			return '';
+
 		if (!is_ipv6_interface(ipv6_mode, afnames, afidx))
 			return '';
 
@@ -121,6 +148,7 @@
 {{ generate_interface_config(afname, afidx, afnames) }}
 {{ generate_vlan_routing_rule(afname) }}
 {{ generate_ipv4_config(afname, afnames, afidx) }}
+{{ generate_broad_band_config(afname, afnames, afidx) }}
 {{ generate_ipv6_config(afname, afnames, afidx) }}
 
 {%	endfor %}

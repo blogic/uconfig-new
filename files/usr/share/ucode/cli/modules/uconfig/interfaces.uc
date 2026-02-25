@@ -1,7 +1,10 @@
 'use strict';
 
+import { access } from 'fs';
 import * as uconfig from 'cli.uconfig';
 import * as editor from 'cli.object-editor';
+
+const has_wwan = access('/lib/apk/packages/ucode-mod-wwan.list');
 
 function is_proto_static(ctx, args, named) {
 	let addressing = named.addressing;
@@ -118,7 +121,7 @@ const ipv4_editor = {
 			required: true,
 			args: {
 				type: 'enum',
-				value: [ 'none', 'static', 'dynamic'],
+				value: [ 'none', 'static', 'dynamic' ],
 			}
 		},
 
@@ -267,6 +270,105 @@ const ucIPv6 = {
 };
 editor.new(ipv6_editor, ucIPv6);
 uconfig.add_node('ucIPv6', ucIPv6);
+
+function is_wwan_type(ctx, args, named) {
+	let bb_type = named.type;
+	if (ctx.data.edit?.type)
+		bb_type ??= ctx.data.edit.type;
+	return bb_type == 'wwan';
+}
+
+function is_pppoe_type(ctx, args, named) {
+	let bb_type = named.type;
+	if (ctx.data.edit?.type)
+		bb_type ??= ctx.data.edit.type;
+	return bb_type == 'pppoe';
+}
+
+const broad_band_editor = {
+	change_cb: uconfig.changed,
+
+	named_args: {
+		type: {
+			help: 'Broadband connection type',
+			args: {
+				type: 'enum',
+				value: function() {
+					let values = [ 'pppoe' ];
+					if (has_wwan)
+						push(values, 'wwan');
+					return values;
+				},
+			}
+		},
+
+		username: {
+			help: 'Authentication username for the broadband connection',
+			args: {
+				type: 'string',
+			}
+		},
+
+		password: {
+			help: 'Authentication password for the broadband connection',
+			args: {
+				type: 'string',
+			}
+		},
+
+		device: {
+			help: 'Modem control device path for WWAN connections',
+			available: is_wwan_type,
+			default: '/dev/cdc-wdm0',
+			args: {
+				type: 'string',
+			}
+		},
+
+		apn: {
+			help: 'Access point name for cellular connections',
+			available: is_wwan_type,
+			args: {
+				type: 'string',
+			}
+		},
+
+		pincode: {
+			help: 'SIM card PIN code',
+			available: is_wwan_type,
+			args: {
+				type: 'string',
+			}
+		},
+
+		'ip-type': {
+			help: 'IP version negotiated by the modem',
+			available: is_wwan_type,
+			default: 'ipv4v6',
+			args: {
+				type: 'enum',
+				value: [ 'ipv4', 'ipv6', 'ipv4v6' ],
+			}
+		},
+
+		'service-name': {
+			help: 'PPPoE service name filter',
+			available: is_pppoe_type,
+			args: {
+				type: 'string',
+			}
+		},
+
+		'ac-name': {
+			help: 'PPPoE access concentrator name filter',
+			available: is_pppoe_type,
+			args: {
+				type: 'string',
+			}
+		},
+	}
+};
+const ucBroadBand = uconfig.add_node('ucBroadBand', editor.new(broad_band_editor));
 
 const interface_editor = {
         change_cb: uconfig.changed,
@@ -642,6 +744,16 @@ const ucInterface = {
 		select: function(ctx, argv) {
 			return ctx.set(null, {
 				edit: uconfig.lookup([ 'interfaces', ctx.data.name, 'ipv6' ]),
+			});
+		}
+	},
+
+	'broad-band': {
+		help: 'Configure broadband access credentials',
+		select_node: 'ucBroadBand',
+		select: function(ctx, argv) {
+			return ctx.set(null, {
+				edit: uconfig.lookup([ 'interfaces', ctx.data.name, 'broad-band' ]),
 			});
 		}
 	},
