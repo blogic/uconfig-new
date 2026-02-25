@@ -43,9 +43,9 @@
 
 		uci_comment(output, '### generate port assignment');
 		if (is_upstream_interface(interface))
-			uci_list_string(output, 'network.up.ports', port);
+			uci_list_string(output, 'network.wan_bridge.ports', port);
 		else
-			uci_list_string(output, 'network.down.ports', port);
+			uci_list_string(output, 'network.lan_bridge.ports', port);
 
 		return uci_output(output);
 	}

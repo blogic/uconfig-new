@@ -1,23 +1,6 @@
 {
 	"uuid": 2,
 
-	"definitions": {
-		"radius-servers": {
-			"radius": {
-				"authentication": {
-					"host": "127.0.0.1",
-					"port": 1812,
-					"secret": "secret"
-				},
-				"accounting": {
-					"host": "127.0.0.1",
-					"port": 1813,
-					"secret": "secret"
-				}
-			}
-		}
-	},
-
 	"interfaces": {
 		"wan": {
 			"role": "upstream",
@@ -62,7 +45,7 @@
 			"port": 22
 		},
 		"ieee8021x": {
-			"radius-server": "radius"
+			"radius-server": "local"
 		}
 	}
 }

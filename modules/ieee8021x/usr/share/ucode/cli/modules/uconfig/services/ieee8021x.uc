@@ -8,11 +8,13 @@ const ieee8021x_editor = {
 
 	named_args: {
 		'radius-server': {
-			help: 'RADIUS server name from definitions',
+			help: 'The RADIUS server name (use "local" for built-in server)',
 			args: {
 				type: 'enum',
 				value: function() {
-					return sort(keys(uconfig.lookup([ 'definitions', 'radius-servers' ]) || {}));
+					let servers = sort(keys(uconfig.lookup([ 'definitions', 'radius-servers' ]) || {}));
+					unshift(servers, 'local');
+					return servers;
 				},
 			}
 		},

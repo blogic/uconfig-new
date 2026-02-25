@@ -1,4 +1,6 @@
 {%
+	import * as radius from 'uconfig.radius';
+
 	// Constants
 	const CERTIFICATE_PATHS = {
 		ca: '/etc/uconfig/certificates/ca.pem',
@@ -51,8 +53,7 @@
 		return;
 	}
 
-	if (state.definitions?.radius_servers)
-		ieee8021x.radius = state.definitions.radius_servers[ieee8021x.radius_server];
+	ieee8021x.radius = radius.lookup(ieee8021x.radius_server, state.definitions);
 
 	if (!has_valid_radius_config()) {
 		warn('invalid radius configuration');
