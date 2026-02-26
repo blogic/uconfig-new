@@ -49,4 +49,4 @@ const uConfig = {
 		select_node: 'ucExamples',
 	},
 };
-uconfig.add_node('uConfig', uConfig);
+model.add_node('uConfig', uConfig);

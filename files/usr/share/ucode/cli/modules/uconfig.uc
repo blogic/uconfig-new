@@ -219,6 +219,6 @@ const Root = {
 		},
 	}
 };
-uconfig.add_node('Root', Root);
+model.add_node('Root', Root);
 
 model.add_modules('uconfig/*.uc');
