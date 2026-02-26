@@ -1,0 +1,78 @@
+$module: uconfig-mod-qosify
+description:
+  This section describes the QoS behaviour of the unit.
+type: object
+properties:
+  bulk-detection:
+    description:
+      Automatically detect and classify bulk flows based on average
+      packet size and PPS.
+    type: object
+    properties:
+      dscp:
+        description:
+          The DSCP value assigned to packets belonging to a bulk flow.
+        $ref: "https://uconfig.openwrt.org/schema/v1/service/quality-of-service/class-selector/"
+        default: CS0
+      packets-per-second:
+        description:
+          The PPS rate that will cause a flow to be classified as bulk.
+        type: number
+        default: 0
+  services:
+    description:
+      A list of predefined named services that shall be classified
+      according to the qos.json database.
+    type: array
+    items:
+      type: string
+  classifier:
+    description:
+      Custom traffic classifiers. Each entry maps traffic matching
+      its constraints to a DSCP value.
+    type: array
+    items:
+      type: object
+      properties:
+        dscp:
+          description:
+            The DSCP value to assign to matching packets.
+          $ref: "https://uconfig.openwrt.org/schema/v1/service/quality-of-service/class-selector/"
+          default: CS1
+        ports:
+          description:
+            Layer 3 protocol and port/range match rules.
+          type: array
+          items:
+            type: object
+            properties:
+              protocol:
+                type: string
+                enum:
+                - any
+                - tcp
+                - udp
+                default: any
+              port:
+                type: integer
+              range-end:
+                type: integer
+              reclassify:
+                type: boolean
+                default: true
+        dns:
+          description:
+            FQDN wildcard match rules. Resolved IPs are used for
+            packet classification.
+          type: array
+          items:
+            type: object
+            properties:
+              fqdn:
+                type: string
+              suffix-matching:
+                type: boolean
+                default: true
+              reclassify:
+                type: boolean
+                default: true

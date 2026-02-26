@@ -13,6 +13,8 @@ properties:
     $ref: "https://uconfig.openwrt.org/schema/v1/service/log/"
   mdns:
     $ref: "https://uconfig.openwrt.org/schema/v1/service/mdns/"
+  quality-of-service:
+    $ref: "https://uconfig.openwrt.org/schema/v1/service/quality-of-service/"
   radius-server:
     $ref: "https://uconfig.openwrt.org/schema/v1/service/radius-server/"
   ssh:

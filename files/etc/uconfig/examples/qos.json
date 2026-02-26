@@ -1,0 +1,109 @@
+{
+	"uuid": 2,
+
+	"unit": {
+                "timezone": "Europe/Berlin"
+        },
+
+	"radios": {
+		"2G": {
+			"channel-mode": "HE",
+			"channel-width": 20
+		},
+		"5G": {
+			"channel-mode": "HE",
+			"channel-width": 80,
+			"channel": 36
+		}
+	},
+
+	"interfaces": {
+		"wan": {
+			"role": "upstream",
+			"ports": {
+				"wan*": "auto"
+			},
+			"ipv4": {
+				"addressing": "dynamic"
+			},
+			"ipv6": {
+				"addressing": "dynamic"
+			},
+			"quality-of-service": {
+				"bandwidth-up": 1000,
+				"bandwidth-down": 1000
+			}
+		},
+		"lan": {
+			"role": "downstream",
+			"services": [ "mdns", "ssh" ],
+			"ports": {
+				"lan*": "auto"
+			},
+
+			"ipv4": {
+				"addressing": "static",
+				"subnet": "192.168.11.1/24",
+				"dhcp-pool": {
+					"lease-first": 10,
+					"lease-count": 100,
+					"lease-time": "6h"
+				}
+			},
+
+			"ipv6": {
+				"addressing": "static",
+				"dhcpv6": {
+					"mode": "hybrid"
+				}
+			},
+
+			"ssids": {
+				"nat": {
+					"purpose": "system-defaults",
+					"ssid": "OpenWrt",
+					"wifi-radios": [
+						"2G", "5G"
+					],
+					"template": {
+						"mode": "encrypted",
+						"security": "compatibility",
+						"key": "aaaaaaaa"
+					}
+				}
+			}
+		}
+	},
+
+	"services": {
+		"ssh": {
+			"port": 22
+		},
+		"quality-of-service": {
+			"services": [ "zoom", "youtube", "networking" ],
+			"bulk-detection": {
+				"dscp": "CS1",
+				"packets-per-second": 32
+			},
+			"classifier": [
+				{
+					"dscp": "AF41",
+					"ports": [
+						{
+							"protocol": "udp",
+							"port": 5000,
+							"range-end": 5100
+						}
+					],
+					"dns": [
+						{
+							"fqdn": "example.com",
+							"suffix-matching": true,
+							"reclassify": false
+						}
+					]
+				}
+			]
+		}
+	}
+}
