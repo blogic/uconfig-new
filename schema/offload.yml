@@ -1,0 +1,15 @@
+description:
+  Offloading configuration for hardware and software acceleration.
+type: object
+properties:
+  firewall:
+    description:
+      Controls firewall flow offloading. "none" disables offloading,
+      "software" enables software flow offloading, "hardware" enables
+      both software and hardware flow offloading.
+    type: string
+    enum:
+      - none
+      - software
+      - hardware
+    default: software

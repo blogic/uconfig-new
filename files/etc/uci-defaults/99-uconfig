@@ -59,7 +59,6 @@ config defaults
 	option input        REJECT
 	option output       ACCEPT
 	option forward      REJECT
-	option flow_offloading 1
 EOF
 
 uci -c $SHADOW commit

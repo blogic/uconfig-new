@@ -59,6 +59,24 @@
 		return uci_output(output);
 	}
 
+	function generate_firewall_offload() {
+		let offload = state.offload?.firewall ?? 'software';
+		let output = [];
+
+		uci_comment(output, '### generate firewall offload settings');
+		if (offload == 'none') {
+			uci_set_number(output, 'firewall.@defaults[0].flow_offloading', 0);
+		} else if (offload == 'hardware') {
+			uci_set_number(output, 'firewall.@defaults[0].flow_offloading', 1);
+			uci_set_number(output, 'firewall.@defaults[0].flow_offloading_hw', 1);
+		} else {
+			uci_set_number(output, 'firewall.@defaults[0].flow_offloading', 1);
+			uci_set_number(output, 'firewall.@defaults[0].flow_offloading_hw', 0);
+		}
+
+		return uci_output(output);
+	}
+
 	function generate_mac_address(interface_name, interface_device, mac_address) {
 		let output = [];
 
@@ -84,6 +102,9 @@
 ## WAN interface
 {{ generate_wan_interface() }}
 {%	endif %}
+
+## Firewall offload configuration
+{{ generate_firewall_offload() }}
 
 ## MAC address configuration
 {%	for (let k, v in board_json.macaddr): %}

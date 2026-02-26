@@ -30,5 +30,7 @@ properties:
     $ref: "https://uconfig.openwrt.org/schema/v1/definitions/"
   ethernet:
     $ref: "https://uconfig.openwrt.org/schema/v1/ethernet/"
+  offload:
+    $ref: "https://uconfig.openwrt.org/schema/v1/offload/"
   services:
     $ref: "https://uconfig.openwrt.org/schema/v1/service/"
