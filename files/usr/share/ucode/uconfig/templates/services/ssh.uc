@@ -105,7 +105,8 @@
 		return;
 
 	let ssh_config = normalize_ssh_config();
-	let cli_port = ssh_config.cli_port;
+	ssh_config.port ??= 22;
+	let cli_port = ssh_config.cli_port ?? 2222;
 	generate_authorized_keys_file(ssh_config.authorized_keys);
 
 	let conflict = port.claim('ssh', ssh_config.port, 'tcp', ssh_interfaces);
