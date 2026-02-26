@@ -84,13 +84,6 @@ const uConfig = {
 		},
 	},
 
-	'dry-run': {
-		help: 'Commit and apply pending changes',
-		call: function(ctx, argv) {
-			return uconfig.dry_run(ctx);
-		}
-	},	
-
 	edit: {
 		help: 'Edit the active configuration',
 		no_subcommands: true,

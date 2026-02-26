@@ -110,6 +110,16 @@ export function lookup(path) {
 	return cfg;
 };
 
+let dry_run_call = {
+	help: 'Validate pending changes without applying',
+	call: function(ctx, argv) {
+		if (!model.uconfig.changed)
+			return ctx.error('NO_CHANGES', 'There are no pending changes\n');
+
+		return dry_run(ctx);
+	}
+};
+
 let commit_call = {
 	help: 'Commit and apply pending changes',
 	call: function(ctx, argv) {
@@ -123,6 +133,7 @@ let commit_call = {
 };
 
 export function add_node(name, obj) {
+	obj['dry-run'] = dry_run_call;
 	obj.commit = commit_call;
 	return model.add_node(name, obj);
 };
