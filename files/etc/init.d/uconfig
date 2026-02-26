@@ -4,7 +4,7 @@ START=10
 BOOT=0
 
 start() {
-	[ -f /etc/uconfig/capabilities.json ] || /usr/libexec/uconfig/capabilities.uc
+	[ -L /etc/uconfig/configs/uconfig.active ] || /usr/libexec/uconfig/setup.uc
 
 	mkdir -p /var/run/uci
 	uconfig_apply -n /etc/uconfig/configs/uconfig.active

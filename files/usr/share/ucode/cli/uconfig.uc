@@ -3,10 +3,6 @@
 import { readfile, readlink, unlink, writefile } from 'fs';
 import * as ubus from 'ubus';
 
-export let capabilities = readfile('/etc/uconfig/capabilities.json');
-if (capabilities)
-	capabilities = json(capabilities);
-
 export function service(cmd) {
 	return system([ '/etc/init.d/uconfig', cmd ]);
 };

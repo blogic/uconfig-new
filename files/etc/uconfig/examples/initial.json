@@ -5,7 +5,7 @@
 	"interfaces": {
 		"wan": {
 			"role": "upstream",
-			"services": [ "ssh", "cli", "mdns", "webui" ],
+			"services": [ "ssh" ],
 			"ports": {
 				"wan*": "auto"
 			},
@@ -18,14 +18,14 @@
 		},
 		"lan": {
 			"role": "downstream",
-			"services": [ "ssh", "cli", "mdns", "webui" ],
+			"services": [ "ssh", "cli" ],
 			"ports": {
 				"lan*": "auto"
 			},
 
 			"ipv4": {
 				"addressing": "static",
-				"subnet": "192.168.11.1/24",
+				"subnet": "192.168.1.1/24",
 				"dhcp-pool": {
 					"lease-first": 10,
 					"lease-count": 100,
@@ -39,12 +39,6 @@
 					"mode": "hybrid"
 				}
 			}
-		}
-	},
-
-	"services": {
-		"ssh": {
-			"port": 22
 		}
 	}
 }

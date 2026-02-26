@@ -7,8 +7,8 @@ global.fs = fs;
 
 import { uci } from 'uconfig.uci';
 import * as ubus from 'ubus';
-import { capabilities } from 'uconfig.capabilities';
-global.capabilities = capabilities;
+import * as board_json from 'uconfig.board_json';
+global.board_json = board_json;
 
 import * as ethernet from 'uconfig.ethernet';
 import * as routing_table from 'uconfig.routing_table';
@@ -55,7 +55,6 @@ function tryinclude(path, scope) {
 }
 
 let serial = uci.get("uconfig", "config", "serial");
-let board = json(fs.readfile("/etc/board.json"));
 
 export function generate(state, logs, scope) {
 	logs = logs || [];
@@ -86,7 +85,7 @@ export function generate(state, logs, scope) {
 
 		location: '/',
 		serial,
-		board,
+		board: board_json.board,
 
 		uci,
 		ubus,

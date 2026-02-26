@@ -64,7 +64,7 @@ EOF
 
 uci -c $SHADOW commit
 
-/usr/libexec/uconfig/capabilities.uc
+/usr/libexec/uconfig/setup.uc
 
 [ -f /usr/bin/pkgen -a ! -f /etc/uconfig/certificates/ca.pem ] && {
 	mkdir -p /etc/uconfig/certificates/

@@ -86,7 +86,7 @@
 {%	endif %}
 
 ## MAC address configuration
-{%	for (let k, v in capabilities.macaddr): %}
-{{ generate_mac_address(k, capabilities.network[k][0], v) }}
+{%	for (let k, v in board_json.macaddr): %}
+{{ generate_mac_address(k, board_json.network[k][0], v) }}
 {%	endfor %}
 

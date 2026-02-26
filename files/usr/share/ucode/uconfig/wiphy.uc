@@ -1,11 +1,10 @@
 'use strict';
 
-import * as fs from 'fs';
 import * as uci from 'uci';
 import * as iwinfo from 'iwinfo';
+import { board } from 'uconfig.board_json';
 
 let cursor = uci ? uci.cursor() : null;
-let board = json(fs.readfile('/etc/board.json'));
 
 export let phys = [];
 

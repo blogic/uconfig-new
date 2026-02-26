@@ -6,10 +6,8 @@ import * as ubus from 'ubus';
 import * as uloop from 'uloop';
 import * as nl80211 from 'nl80211';
 import * as rtnl from 'rtnl';
-import * as fs from 'fs';
 import { md5 } from 'digest';
-
-let capab = json(fs.readfile('/etc/uconfig/capabilities.json')) ?? {};
+import * as board_json from 'uconfig.board_json';
 
 uloop.init();
 
@@ -18,7 +16,7 @@ let hapd_subscriber;
 let log_subscriber;
 let dnsmasq_subscriber;
 let ratelimit = false;
-let wan_ports = capab.network?.wan ?? [];
+let wan_ports = board_json.network?.wan ?? [];
 let carrier = {};
 let events = [];
 let event_count = 0;
@@ -318,9 +316,9 @@ function rtnl_cb(msg) {
 	if (!exists(msg.msg, "carrier"))
 		return;
 
-	let name = ifname_lookup('LAN', msg.msg?.ifname, capab.network?.lan);
+	let name = ifname_lookup('LAN', msg.msg?.ifname, board_json.network?.lan);
 	if (!name)
-		name = ifname_lookup('WAN', msg.msg?.ifname, capab.network?.wan);
+		name = ifname_lookup('WAN', msg.msg?.ifname, board_json.network?.wan);
 	if (name) {
 		let verb = msg.msg.carrier ? EVENT_VERB.UP : EVENT_VERB.DOWN;
 		if (carrier[name] == verb)

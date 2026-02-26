@@ -17,7 +17,7 @@ function discover_ports() {
 	let roles = {};
 
 	/* Derive ethernet port names and roles from default config */
-	for (let role, spec in capabilities.network) {
+	for (let role, spec in board_json.network) {
 		for (let i, ifname in spec) {
 			role = lc(role);
 			push(roles[role] = roles[role] || [], {

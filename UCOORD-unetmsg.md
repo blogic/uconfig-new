@@ -217,7 +217,7 @@ Request device capabilities and wireless PHY information.
 }
 ```
 
-capabilities is loaded from /etc/uconfig/capabilities.json.
+capabilities is constructed from the `uconfig.board_json` module.
 wiphy is the live PHY data from the uconfig.wiphy module.
 
 

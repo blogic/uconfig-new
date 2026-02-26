@@ -8,9 +8,9 @@ import * as ubus from 'ubus';
 import * as uloop from 'uloop';
 import * as rtnl from 'rtnl';
 import * as wiphy from 'uconfig.wiphy';
+import * as board_json from 'uconfig.board_json';
 let pending = false;
 let l3_devices;
-let capabilities = json(readfile('/etc/uconfig/capabilities.json'));
 
 let fingerprints = {};
 let devices_db = {};
@@ -404,7 +404,7 @@ function ports(args) {
 	}
 
 	for (let role in [ 'wan', 'lan' ]) {
-		let spec = capabilities.network[role];
+		let spec = board_json.network[role];
 		for (let i, ifname in spec) {
 			role = uc(role);
 			if (ports && !(ifname in ports))

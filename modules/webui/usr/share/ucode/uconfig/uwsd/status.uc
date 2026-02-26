@@ -3,6 +3,7 @@
 import * as ubus from 'ubus';
 import * as fs from 'fs';
 import * as iwinfo from 'iwinfo';
+import { board } from 'uconfig.board_json';
 
 function connectivity_status() {
 	let iface_dump = ubus.call('network.interface', 'dump');
@@ -35,11 +36,6 @@ function connectivity_status() {
 }
 
 function ethernet_ports_status() {
-	let board_data = fs.readfile('/etc/board.json');
-	if (!board_data)
-		return {};
-
-	let board = json(board_data);
 	if (!board?.network)
 		return {};
 

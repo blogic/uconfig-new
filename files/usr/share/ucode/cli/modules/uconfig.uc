@@ -3,9 +3,10 @@
 import * as uconfig from 'cli.uconfig';
 import * as editor from 'cli.object-editor';
 import * as state from 'uconfig.state';
+import * as board_json from 'uconfig.board_json';
 import { basename, glob, stat } from 'fs';
 
-if (!uconfig.capabilities)
+if (!board_json.board)
 	return;
 
 function is_simple_array(arr) {

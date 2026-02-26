@@ -7,6 +7,7 @@ import * as unetmsg from 'unetmsg.client';
 import * as libubus from 'ubus';
 import * as uloop from 'uloop';
 import * as wiphy from 'uconfig.wiphy';
+import * as board_json from 'uconfig.board_json';
 
 uloop.init();
 let ubus = libubus.connect();
@@ -17,8 +18,15 @@ if (ubus.call('ucoord', 'status')) {
 }
 
 let chan = unetmsg.open(ubus);
-let capabilities = {};
-//let capabilities = json(readfile('/etc/uconfig/capabilities.json')) ?? {};
+let capabilities = {
+	compatible: board_json.compatible,
+	model: board_json.model_name,
+	network: board_json.network,
+};
+if (board_json.macaddr)
+	capabilities.macaddr = board_json.macaddr;
+if (board_json.label_macaddr)
+	capabilities.label_macaddr = board_json.label_macaddr;
 let venues = {};
 let pending = {};
 let next_id = 0;
@@ -233,11 +241,10 @@ handlers.include_request = function(data) {
 };
 
 handlers.capabilities = function(data) {
-	let capa = json(readfile('/etc/uconfig/capabilities.json'));
-	if (!capa)
+	if (!board_json.board)
 		return { ok: false, error: 'capabilities not available' };
 
-	return { ok: true, data: { capabilities: capa, wiphy: wiphy.phys } };
+	return { ok: true, data: { capabilities, wiphy: wiphy.phys } };
 };
 
 handlers.sysupgrade = function(data) {
