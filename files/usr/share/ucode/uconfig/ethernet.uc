@@ -161,6 +161,8 @@ export function port_vlan(interface, port) {
 };
 
 export function find_interface(role, vid) {
+	let broad_band;
+
 	for (let name, interface in state.interfaces) {
 		if (interface.role != role)
 			continue;
@@ -168,8 +170,11 @@ export function find_interface(role, vid) {
 			return interface.name;
 		if (vid in interface.vlan?.trunks)
 			return interface.name;
+		if (interface.broad_band?.type)
+			broad_band = interface.name;
 	}
-	return '';
+
+	return broad_band ?? '';
 };
 
 export function get_interface(role, vid) {
