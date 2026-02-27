@@ -1,0 +1,199 @@
+#!/usr/bin/env ucode
+
+'use strict';
+
+import * as unetmsg from 'unetmsg.client';
+import * as ubus from 'ubus';
+import * as uloop from 'uloop';
+import { readfile } from 'fs';
+
+let remote_assoc_list = {};
+let remote_rrm_nr = {};
+let hostapd = {};
+let chan;
+
+uloop.init();
+
+function assoc_list_get() {
+	let assoc_list = {};
+	let host = replace(readfile('/proc/sys/kernel/hostname'), '\n', '');
+	let status = ubus.call('network.wireless', 'status');
+	for (let phy, radio in status) {
+	       for (let iface in radio.interfaces) {
+			if (iface.config.mode != 'ap')
+				continue;
+
+			let clients = ubus.call(`hostapd.${iface.ifname}`, 'get_clients');
+			for (let mac, assoc in clients?.clients) {
+				if (!assoc.authorized)
+					continue;
+				let band = '5G';
+				if (clients.freq < 2500)
+					band = '2G';
+				else if (clients.freq > 5900)
+					band = '6G';
+				assoc_list[mac] = {
+					band,
+					freq: clients.freq,
+					ssid: iface.config.ssid,
+					rx_bytes: assoc.bytes.rx,
+					tx_bytes: assoc.bytes.tx,
+					rx_rate: assoc.rate.rx,
+					tx_rate: assoc.rate.tx,
+					signal: assoc.signal,
+					network: iface.config.network[0],
+					host,
+				};
+				for (let key in [ 'he', 'vht', 'ht' ])
+					if (assoc[key]) {
+						assoc_list[mac].mode = key;
+						break;
+					}
+			}
+		}
+	}
+	return assoc_list;
+}
+
+function rrm_nr_get_local() {
+	let rrm_nr = [];
+	for (let ifname, info in hostapd)
+		push(rrm_nr, info.rrm_nr);
+	return { rrm_nr };
+}
+
+function rrm_nr_update() {
+	for (let iface, hapd in hostapd) {
+		let list = [];
+		for (let name, data in remote_rrm_nr)
+			for (let rrm_nr in data) {
+				if (hapd.ssid != rrm_nr[1])
+					continue;
+				push(list, rrm_nr)
+			}
+		for (let rrm_nr in rrm_nr_get_local().rrm_nr) {
+			if (hapd.bssid != rrm_nr[0] && hapd.ssid != rrm_nr[1])
+				continue;
+			push(list, rrm_nr)
+		}
+		ubus.call('hostapd.' + iface, 'rrm_nr_set', { list });
+	}
+}
+
+let rrm_nr_refresh_timer;
+function rrm_nr_refresh_timer_set() {
+	if (!rrm_nr_refresh_timer)
+		rrm_nr_refresh_timer = uloop.timer(5000, rrm_nr_update);
+	else
+		rrm_nr_refresh_timer.set(5000);
+}
+
+function remote_rrm_nr_recv(host, data) {
+	remote_rrm_nr[host] = data;
+	rrm_nr_refresh_timer_set();
+}
+
+function remote_assoc_list_recv(host, data) {
+	remote_assoc_list[host] = data;
+}
+
+function rrm_nr_send() {
+	let data = rrm_nr_get_local();
+	chan.send('ucoord.rrm', 'rrm_nr', data);
+}
+
+function rrm_nr_request() {
+	chan.request('ucoord.rrm', 'rrm_nr', {}, (msg) => {
+		remote_rrm_nr_recv(msg.host, msg.rrm_nr);
+	}, () => {});
+}
+
+chan = unetmsg.open(ubus);
+chan.subscribe('ucoord.rrm', (req) => {
+		remote_rrm_nr_recv(req.args.host, req.args.data.rrm_nr);
+	}, () => {
+		remote_rrm_nr = {};
+		rrm_nr_request();
+		rrm_nr_refresh_timer_set();
+	});
+
+chan.publish('ucoord.rrm', (req) => {
+	let data = req.args;
+	let msg;
+	switch (data.type) {
+	case 'rrm_nr':
+		msg = rrm_nr_get_local();
+		return msg;
+	case 'assoc_list':
+		msg = { assoc_list: assoc_list_get() };
+		return msg;
+	}
+	return 0;
+});
+
+function hostapd_add(path, obj) {
+	let ifname = obj[1];
+	ubus.call(path, 'bss_mgmt_enable', { 'neighbor_report': true, 'beacon_report': true, 'bss_transition': true });
+	let status = ubus.call(path, 'get_status');
+	hostapd[ifname] = {
+		rrm_nr: ubus.call(path, 'rrm_nr_get_own').value,
+		bssid: status.bssid,
+		ssid: status.ssid,
+	};
+	ubus.call(path, 'rrm_nr_set', { list: [] });
+	rrm_nr_send();
+	rrm_nr_refresh_timer_set();
+}
+
+function hostapd_remove(path, obj) {
+	let ifname = obj[1];
+	delete hostapd[ifname];
+	rrm_nr_send();
+	rrm_nr_refresh_timer_set();
+}
+
+function unsub_object(add, id, path) {
+	let object = split(path, '.');
+	if (object[0] == 'hostapd' && object[1]) {
+		if (add)
+			hostapd_add(path, object);
+		else
+			hostapd_remove(path, object);
+	}
+}
+
+function ubus_listener(event, payload) {
+	unsub_object(event == 'ubus.object.add', payload.id, payload.path);
+}
+
+rrm_nr_request();
+
+ubus.listener('ubus.object.add', ubus_listener);
+ubus.listener('ubus.object.remove', ubus_listener);
+
+let list = ubus.list();
+for (let k, path in list)
+	unsub_object(true, 0, path);
+
+let ubus_methods = {
+	get_clients: {
+		call: function(req) {
+			remote_assoc_list = {};
+			chan.request('ucoord.rrm', 'assoc_list', {}, (msg) => {
+				remote_assoc_list_recv(msg.host, msg.assoc_list);
+			});
+			let assoc_list = assoc_list_get();
+			for (let host, assoc in remote_assoc_list)
+				for (let mac, info in assoc) {
+					assoc_list[mac] = info;
+					assoc_list[mac].host = host;
+				}
+			return assoc_list;
+		},
+		args: { }
+	},
+};
+ubus.publish('rrm', ubus_methods);
+
+uloop.run();
+uloop.done();
