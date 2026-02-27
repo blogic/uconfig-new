@@ -234,7 +234,7 @@ Validate a configuration on a remote peer without applying it.
 | config | object | yes | Full uconfig JSON document |
 | timeout | integer | no | Timeout in milliseconds |
 
-**Result:** Validation result from uconfig_apply -t.
+**Result:** Validation result from uconfig-apply -t.
 
 
 ### config-apply

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 
 const ACTIVE_CONFIG = '/etc/uconfig/configs/uconfig.active';
 const TEMP_CONFIG = '/tmp/uconfig.new';
-const UCONFIG_APPLY = '/usr/bin/uconfig_apply';
+const UCONFIG_APPLY = '/usr/bin/uconfig-apply';
 
 export function load() {
 	let data = fs.readfile(ACTIVE_CONFIG);

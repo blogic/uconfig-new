@@ -31,7 +31,7 @@ export function update_status() {
 };
 
 export function apply(ctx, path) {
-	if (system(`/usr/bin/uconfig_apply ${path}`))
+	if (system(`/usr/bin/uconfig-apply ${path}`))
 		return ctx.error('APPLY_FAILED', 'Failed to apply config');
 	update_status();
 		return ctx.ok('Applied');
@@ -50,7 +50,7 @@ export function dry_run(ctx) {
 	let path = '/tmp/uconfig.dry-run';
 	writefile(path, model.uconfig.current_cfg);
 
-	let ret = system(`/usr/bin/uconfig_apply -t ${path}`);
+	let ret = system(`/usr/bin/uconfig-apply -t ${path}`);
 	unlink(path);
 
 	if (ret)
@@ -79,10 +79,10 @@ export function commit(ctx) {
 	writefile(path, model.uconfig.current_cfg);
 
 	if (!model.uconfig.dry_run)
-		if (system(`/usr/bin/uconfig_apply -t ${path}`))
+		if (system(`/usr/bin/uconfig-apply -t ${path}`))
 			return ctx.error('TEST_FAILED', 'Dry-run failed');
 
-	let ret = system(`/usr/bin/uconfig_apply ${path}`);
+	let ret = system(`/usr/bin/uconfig-apply ${path}`);
 	
 	if (ret)
 		return ctx.error('APPLY_FAILED', 'Failed to apply config');

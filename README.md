@@ -15,7 +15,7 @@ configuration is preserved for rollback.
 
 ## Apply Pipeline
 
-uconfig_apply (files/usr/bin/uconfig_apply) drives the pipeline.
+uconfig-apply (files/usr/bin/uconfig-apply) drives the pipeline.
 The high-level flow:
 
 ```
@@ -152,7 +152,7 @@ interactive workflow for generating an initial uconfig configuration.
 It walks through device mode (access point or router), root password,
 hostname, timezone, wireless setup and services, then writes the
 resulting JSON to /tmp/uconfig/ and optionally applies it via
-uconfig_apply.
+uconfig-apply.
 
 Wireless radios are auto-discovered from the hardware; the wizard
 selects the best channel mode per band and applies fixed channel
@@ -186,10 +186,10 @@ section:
 1. Edit fields through the CLI - each change sets an internal
    *changed* flag.
 2. dry-run - writes the document to a temporary file and runs
-   uconfig_apply -t to validate and render without applying.
+   uconfig-apply -t to validate and render without applying.
 3. commit - if not already dry-run tested, a dry-run is executed
    first automatically. On success the config is written and
-   uconfig_apply is invoked to apply it.
+   uconfig-apply is invoked to apply it.
 
 
 ## Daemons

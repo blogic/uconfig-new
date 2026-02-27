@@ -48,7 +48,7 @@ export function config_restore_validate(file_path) {
 
 export function config_restore_apply(file_path, shutdown_handler) {
 	shutdown_handler('config-restore', () => {
-		system(`uconfig_apply ${file_path}`);
+		system(`uconfig-apply ${file_path}`);
 		system('reboot');
 	});
 };

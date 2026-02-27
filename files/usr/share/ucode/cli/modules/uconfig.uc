@@ -144,7 +144,7 @@ const uConfig = {
 			if (!stat(path))
 				return ctx.error('CONFIG_NOT_FOUND', `Configuration ${uuid} not found`);
 
-			if (system(`/usr/bin/uconfig_apply -ur ${path}`))
+			if (system(`/usr/bin/uconfig-apply -ur ${path}`))
 				return ctx.error('ROLLBACK_FAILED', 'Failed to roll back config');
 
 			uconfig.update_status();

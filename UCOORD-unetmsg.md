@@ -188,7 +188,7 @@ Remote configuration get/test/apply.
 **get response data:** Contents of
 /etc/uconfig/configs/uconfig.active.
 
-**test response data:** Result from uconfig_apply -t (written
+**test response data:** Result from uconfig-apply -t (written
 to /tmp/uconfig/apply.json).
 
 **apply response:** Same as test, plus "apply": true in the

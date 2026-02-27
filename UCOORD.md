@@ -99,7 +99,7 @@ Three actions via the configure handler
 | Action | Behaviour |
 |--------|-----------|
 | get | Reads /etc/uconfig/configs/uconfig.active on the peer and returns the parsed JSON |
-| test | Writes config to /tmp/uconfig.pending, runs uconfig_apply -t, returns validation result |
+| test | Writes config to /tmp/uconfig.pending, runs uconfig-apply -t, returns validation result |
 | apply | Same as test, but on success also triggers deferred config apply via config_apply_deferred() |
 
 Requests use an ID-based correlation mechanism: each outgoing

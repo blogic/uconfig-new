@@ -7,7 +7,7 @@ start() {
 	[ -L /etc/uconfig/configs/uconfig.active ] || /usr/libexec/uconfig/setup.uc
 
 	mkdir -p /var/run/uci
-	uconfig_apply -n /etc/uconfig/configs/uconfig.active
+	uconfig-apply -n /etc/uconfig/configs/uconfig.active
 	[ $BOOT -eq 0 ] && reload_config
 }
 

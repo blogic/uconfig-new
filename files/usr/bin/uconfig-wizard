@@ -517,6 +517,6 @@ let apply = prompt_yn('Apply configuration now?', true);
 el.close();
 
 if (apply)
-	system(sprintf('uconfig_apply %s', config_path));
+	system(sprintf('uconfig-apply %s', config_path));
 else
 	warn(sprintf('Configuration saved to %s\n', config_path));

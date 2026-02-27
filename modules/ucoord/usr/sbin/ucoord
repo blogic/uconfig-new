@@ -210,14 +210,14 @@ handlers.configure = function(data) {
 	writefile(path, sprintf('%.J', config));
 
 	if (action == 'test') {
-		let ret = system(`uconfig_apply -t ${path}`);
+		let ret = system(`uconfig-apply -t ${path}`);
 		if (ret != 0)
 			return { ok: false, error: 'config test failed' };
 		return { ok: true, data: config_apply_result() };
 	}
 
 	if (action == 'apply') {
-		let ret = system(`uconfig_apply -t ${path}`);
+		let ret = system(`uconfig-apply -t ${path}`);
 		if (ret != 0)
 			return { ok: false, error: 'config test failed' };
 		return { ok: true, apply: true, data: config_apply_result() };
@@ -278,7 +278,7 @@ handlers.sysupgrade = function(data) {
 function config_apply_deferred(venue_name, path) {
 	venue_announce_send(venue_name, 'reconfiguring');
 	uloop.timer(5000, () => {
-		system(`uconfig_apply ${path}`);
+		system(`uconfig-apply ${path}`);
 		uloop.timer(5000, () => {
 			venue_announce_send(venue_name, 'connected');
 		});

@@ -12,14 +12,14 @@ let enroll_ctx;
 function unetd_store(name, data) {
 	unetd.networks[name] = data;
 	writefile('/etc/uconfig/data/unetd.json', sprintf('%.J\n', unetd));
-	system('/usr/bin/uconfig_apply -u /etc/uconfig/configs/uconfig.active');
+	system('/usr/bin/uconfig-apply -u /etc/uconfig/configs/uconfig.active');
 	ubus.call('ucoord', 'reload');
 }
 
 function unetd_delete(name) {
 	delete unetd.networks[name];
 	writefile('/etc/uconfig/data/unetd.json', sprintf('%.J\n', unetd));
-	system('/usr/bin/uconfig_apply -u /etc/uconfig/configs/uconfig.active');
+	system('/usr/bin/uconfig-apply -u /etc/uconfig/configs/uconfig.active');
 	ubus.call('ucoord', 'reload');
 }
 
