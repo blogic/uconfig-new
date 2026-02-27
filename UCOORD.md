@@ -184,10 +184,10 @@ The CLI module registers a top-level ucoord command
 
 | Command | Description |
 |---------|-------------|
-| join | Join a coordination network (access-key, local-network required) |
+| join | Join a coordination network (access-key, network required; netifd interface derived automatically) |
 | status | Show venue/peer status overview |
 | list | Peer table with venue, peer name, state, last seen |
-| create venue $name | Create a new venue (prompts for password) |
+| create venue $name | Create a new venue (network, optional password required) |
 | delete venue $name | Delete a venue (prompts for password) |
 | $peer | Select a peer directly from the top-level peer list |
 
@@ -231,6 +231,21 @@ ucoord integrates with the uconfig service system by registering
 unet as an assignable service
 (modules/ucoord/usr/share/ucode/cli/modules/ucoord.uc).
 
+When a venue is created or a network is joined, the CLI injects
+"unet" into the specified interface's services list in the active
+config (/etc/uconfig/configs/uconfig.active). This ensures the
+unet service template is invoked for that interface during the
+next apply.
+
+When the last venue is destroyed (no networks remain in
+/etc/uconfig/data/unetd.json), the unet service is removed from
+all interface service lists in the active config.
+
+The join command derives the netifd interface name from the
+uconfig interface name by probing candidates (base name, then
+_4 and _6 suffixes) against the netifd ubus interface status,
+returning the first that is up and has an IP address.
+
 The template modules/ucoord/usr/share/ucode/uconfig/templates/services/unet.uc
 generates UCI configuration when interfaces reference the unet
 service:
@@ -240,5 +255,5 @@ service:
 - For each network in /etc/uconfig/data/unetd.json, creates a
   network interface with proto unet, domain, key, auth_key,
   local_network list, and metric.
-- Enables the unetd service when unet interfaces exist.
+- Enables the unet service when unet interfaces exist.
 - Enables the ucoord daemon when networks are configured.

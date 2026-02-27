@@ -2,12 +2,12 @@
 	if (!services.is_present("unetd"))
 		return;
 
-	let unet = json(fs.readfile('/etc/uconfig/data/unetd.json') || '{}');
+	let unet = readjson('/etc/uconfig/data/unetd.json');
 	let networks = unet?.networks ?? {};
 	let interfaces = services.lookup_interfaces("unet");
 	let enable = !!length(interfaces);
 
-	services.set_enabled("unetd", enable);
+	services.set_enabled("unet", length(enable));
 	services.set_enabled("ucoord", length(keys(networks)) > 0);
 
 	if (!enable || !length(keys(networks)))

@@ -2,12 +2,43 @@
 
 import * as ubus from 'ubus';
 import { readfile, writefile } from 'fs';
+import { readjson } from 'uconfig.files';
 import * as editor from 'cli.object-editor';
 import * as uconfig from 'cli.uconfig';
 
-let unetd = json(readfile('/etc/uconfig/data/unetd.json') || '{}');
+let unetd = readjson('/etc/uconfig/data/unetd.json');
 unetd.networks ??= {};
 let enroll_ctx;
+
+const active_config_path = '/etc/uconfig/configs/uconfig.active';
+
+function active_config_interfaces() {
+	let cfg = readjson(active_config_path);
+	return keys(cfg.interfaces ?? {});
+}
+
+function unet_service_inject(interface_name) {
+	let cfg = readjson(active_config_path);
+	if (!cfg.interfaces?.[interface_name])
+		return false;
+	cfg.interfaces[interface_name].services ??= [];
+	if (index(cfg.interfaces[interface_name].services, 'unet') < 0)
+		push(cfg.interfaces[interface_name].services, 'unet');
+	writefile(active_config_path, sprintf('%.J\n', cfg));
+	return true;
+}
+
+function unet_service_cleanup() {
+	let cfg = readjson(active_config_path);
+	for (let name, iface in cfg.interfaces ?? {}) {
+		if (!iface.services)
+			continue;
+		let idx = index(iface.services, 'unet');
+		if (idx >= 0)
+			splice(iface.services, idx, 1);
+	}
+	writefile(active_config_path, sprintf('%.J\n', cfg));
+}
 
 function unetd_store(name, data) {
 	unetd.networks[name] = data;
@@ -19,6 +50,8 @@ function unetd_store(name, data) {
 function unetd_delete(name) {
 	delete unetd.networks[name];
 	writefile('/etc/uconfig/data/unetd.json', sprintf('%.J\n', unetd));
+	if (!length(keys(unetd.networks)))
+		unet_service_cleanup();
 	system('/usr/bin/uconfig-apply -u /etc/uconfig/configs/uconfig.active');
 	ubus.call('ucoord', 'reload');
 }
@@ -131,12 +164,30 @@ function network_validate(ctx, name) {
 	return true;
 }
 
+function local_network_derive(ctx, name) {
+	let suffixes = ['', '_4', '_6'];
+
+	for (let suffix in suffixes) {
+		let candidate = name + suffix;
+		let status = ubus.call('network.interface.' + candidate, 'status');
+		if (!status || !status.up)
+			continue;
+
+		let has_addr = length(status['ipv4-address']) > 0 ||
+			       length(status['ipv6-address']) > 0;
+		if (has_addr)
+			return candidate;
+	}
+
+	ctx.invalid_argument(`No usable netifd interface found for '${name}'`);
+}
+
 function venue_display_name(name) {
 	return match(name, /^ucoord_/) ? substr(name, 7) : name;
 }
 
 function get_venues() {
-	let config = json(readfile('/etc/uconfig/data/unetd.json') || '{}');
+	let config = readjson('/etc/uconfig/data/unetd.json');
 	let networks = config.networks ?? {};
 	let venues = {};
 	for (let k in keys(networks))
@@ -154,21 +205,28 @@ const ucoord_node = {
 				required: true,
 				args: { type: 'string' },
 			},
-			'local-network': {
-				help: 'Local network interface to use',
+			network: {
+				help: 'Network interface for unet service',
 				required: true,
-				args: { type: 'string' },
+				args: {
+					type: 'enum',
+					value: () => active_config_interfaces(),
+				},
 			},
 		},
 		call: function(ctx, argv, named) {
-			if (!network_validate(ctx, named['local-network']))
+			let local_network = local_network_derive(ctx, named.network);
+			if (!local_network)
 				return;
+
+			if (!unet_service_inject(named.network))
+				return ctx.error('ERROR', `Interface '${named.network}' not found in active config`);
 
 			let unet = model.context().select(['unet']);
 			if (!unet)
 				return ctx.error('ERROR', 'unet CLI module not available');
 
-			let args = ['join', 'access-key', named['access-key'], 'local-network', named['local-network']];
+			let args = ['join', 'access-key', named['access-key'], 'local-network', local_network];
 			let ret = unet.call(args);
 			if (ret?.error)
 				return ctx.error('FAILED', ret.error);
@@ -362,7 +420,7 @@ const ucoord_host_node = {
 			let venue = ctx.data.name;
 			let network_name = 'ucoord_' + venue;
 
-			let unetd_config = json(readfile('/etc/uconfig/data/unetd.json') || '{}');
+			let unetd_config = readjson('/etc/uconfig/data/unetd.json');
 			let config = unetd_config.networks?.[network_name];
 			if (!config)
 				return ctx.error('NOT_FOUND', `Venue '${venue}' not found`);
@@ -708,6 +766,14 @@ function ucoord_host_node_get() {
 
 const venue_edit_create_destroy = {
 	named_args: {
+		network: {
+			help: 'Network interface for unet service',
+			required: true,
+			args: {
+				type: 'enum',
+				value: () => active_config_interfaces(),
+			},
+		},
 		password: {
 			help: 'Network configuration password',
 			no_complete: true,
@@ -729,6 +795,11 @@ const venue_edit_create_destroy = {
 					named.password = password_get(ctx, 'Set new config password: ', true);
 					if (!named.password)
 						return;
+				}
+
+				if (!unet_service_inject(named.network)) {
+					ctx.error('ERROR', `Interface '${named.network}' not found in active config`);
+					return;
 				}
 
 				let network_name = 'ucoord_' + name;
