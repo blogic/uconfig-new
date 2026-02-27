@@ -125,7 +125,14 @@ const uConfig = {
 		call: function(ctx, argv) {
 			let configs = glob('/etc/uconfig/configs/uconfig.cfg.*');
 			configs = map(configs, (v) => split(basename(v), '.')[2]);
-			configs = map(configs, (v) => v + (model.uconfig.status.uuid == v ? ' - active' : ''));
+			configs = map(configs, function(v) {
+				let t = localtime(+v);
+				let ts = sprintf('%04d-%02d-%02d %02d:%02d:%02d',
+					t.year, t.mon + 1, t.mday,
+					t.hour, t.min, t.sec);
+				let suffix = model.uconfig.status.uuid == v ? ' - active' : '';
+				return v + ' - ' + ts + suffix;
+			});
 
 			return ctx.list('Configs', configs);
 		}
