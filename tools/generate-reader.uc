@@ -29,6 +29,24 @@ function to_json_ptr(propertyName)
 	return replace(propertyName, /[~\/]/g, m => (m == '~' ? '~0' : '~1'));
 }
 
+function collect_refs(spec, refs)
+{
+	if (type(spec) != "object")
+		return;
+
+	let r = spec["$ref"];
+	if (type(r) == "string" && index(r, "#/$defs/") == 0)
+		refs[replace(r, "#/$defs/", "")] = true;
+
+	for (let k, v in spec) {
+		if (type(v) == "object")
+			collect_refs(v, refs);
+		else if (type(v) == "array")
+			for (let item in v)
+				collect_refs(item, refs);
+	}
+}
+
 function to_text_list(listValue, quoteItems)
 {
 	let res = [];
@@ -649,9 +667,16 @@ let GeneratorProto = {
 	module: function(module)
 	{
 		let indent = '';
+		let all_defs = this.read_schema(this.path)['$defs'];
 
 		this.schema = modules[module];
 		this.output = fs.open(ARGV[0] + 'generated/modules/' + to_method_name('schema', module) + '.uc', 'w');
+
+		let refs = {};
+		collect_refs(this.schema, refs);
+		for (let def_id in keys(refs))
+			if (exists(all_defs, def_id))
+				this.emit_spec_validation_function(indent, 'instantiate', def_id, all_defs[def_id]);
 
 		let functionName = this.emit_spec_validation_function(indent, 'module', module, this.schema);
 
